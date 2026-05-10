@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <ProjectGuid>{12345678-1234-1234-1234-123456789ABC}</ProjectGuid>
+    <RootNamespace>com.polyphase.system.character.dialogue.core</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros">
+    <PolyphasePath Condition="'$(PolyphasePath)' == '' and '$(POLYPHASE_PATH)' != ''">$(POLYPHASE_PATH)</PolyphasePath>
+    <PolyphasePath Condition="'$(PolyphasePath)' == '' and '$(PolyphaseDevPath)' != ''">$(PolyphaseDevPath)</PolyphasePath>
+    <!-- Relative layout from generation: addon ../engine -->
+    <PolyphasePath Condition="'$(PolyphasePath)' == '' and Exists('$(ProjectDir)..\..\..\..\..\Polyphase\CODE\mergePolyphase\polyphase-engine\Polyphase.sln')">$([System.IO.Path]::GetFullPath('$(ProjectDir)..\..\..\..\..\Polyphase\CODE\mergePolyphase\polyphase-engine'))</PolyphasePath>
+    <PolyphasePath Condition="'$(PolyphasePath)' == '' and Exists('$(ProjectDir)..\Polyphase.sln')">$([System.IO.Path]::GetFullPath('$(ProjectDir)..'))</PolyphasePath>
+    <PolyphasePath Condition="'$(PolyphasePath)' == '' and Exists('$(ProjectDir)..\..\Polyphase.sln')">$([System.IO.Path]::GetFullPath('$(ProjectDir)..\..'))</PolyphasePath>
+    <PolyphasePath Condition="'$(PolyphasePath)' == '' and Exists('$(ProjectDir)..\..\..\Polyphase.sln')">$([System.IO.Path]::GetFullPath('$(ProjectDir)..\..\..'))</PolyphasePath>
+    <PolyphasePath Condition="'$(PolyphasePath)' == '' and Exists('$(ProjectDir)..\..\..\..\Polyphase.sln')">$([System.IO.Path]::GetFullPath('$(ProjectDir)..\..\..\..'))</PolyphasePath>
+    <PolyphasePath Condition="'$(PolyphasePath)' == '' and Exists('C:\Polyphase\Polyphase.exe')">C:\Polyphase</PolyphasePath>
+    <PolyphasePath Condition="'$(PolyphasePath)' == '' and Exists('C:\Program Files\Polyphase\Polyphase.exe')">C:\Program Files\Polyphase</PolyphasePath>
+    <PolyphasePath Condition="'$(PolyphasePath)' == '' and Exists('C:\Program Files (x86)\Polyphase\Polyphase.exe')">C:\Program Files (x86)\Polyphase</PolyphasePath>
+    <PolyphasePath Condition="'$(PolyphasePath)' == ''">M:\Projects\Polyphase\Polyphase\CODE\mergePolyphase\polyphase-engine\</PolyphasePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(ProjectDir)Build\Debug\</OutDir>
+    <IntDir>$(ProjectDir)Build\Intermediate\Debug\</IntDir>
+    <TargetName>com.polyphase.system.character.dialogue.core</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(ProjectDir)Build\Release\</OutDir>
+    <IntDir>$(ProjectDir)Build\Intermediate\Release\</IntDir>
+    <TargetName>com.polyphase.system.character.dialogue.core</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>OCTAVE_PLUGIN_EXPORT;EDITOR=1;LUA_ENABLED=1;GLM_FORCE_RADIANS;PLATFORM_WINDOWS=1;API_VULKAN=1;NOMINMAX;COMPOLYPHASESYSTEMCHARACTERDIALOGUECORE_EXPORTS;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(PolyphasePath)Engine\Source;$(PolyphasePath)Engine\Source\Engine;$(PolyphasePath)Engine\Source\Plugins;$(PolyphasePath)External\Lua;$(PolyphasePath)External\glm;$(PolyphasePath)External\Imgui;$(PolyphasePath)External\ImGuizmo;$(PolyphasePath)External\bullet3\src;$(PolyphasePath)External\Assimp;$(PolyphasePath)External;$(VULKAN_SDK)\Include;$(ProjectDir)Source;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(PolyphasePath)\;$(PolyphasePath)\lib\;$(PolyphasePath)\Standalone\Build\Windows\x64\DebugEditor\;$(PolyphasePath)\External\Lua\Build\Windows\x64\DebugEditor\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>Polyphase.lib;Lua.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>OCTAVE_PLUGIN_EXPORT;EDITOR=1;LUA_ENABLED=1;GLM_FORCE_RADIANS;PLATFORM_WINDOWS=1;API_VULKAN=1;NOMINMAX;COMPOLYPHASESYSTEMCHARACTERDIALOGUECORE_EXPORTS;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(PolyphasePath)Engine\Source;$(PolyphasePath)Engine\Source\Engine;$(PolyphasePath)Engine\Source\Plugins;$(PolyphasePath)External\Lua;$(PolyphasePath)External\glm;$(PolyphasePath)External\Imgui;$(PolyphasePath)External\ImGuizmo;$(PolyphasePath)External\bullet3\src;$(PolyphasePath)External\Assimp;$(PolyphasePath)External;$(VULKAN_SDK)\Include;$(ProjectDir)Source;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(PolyphasePath)\;$(PolyphasePath)\lib\;$(PolyphasePath)\Standalone\Build\Windows\x64\ReleaseEditor\;$(PolyphasePath)\External\Lua\Build\Windows\x64\ReleaseEditor\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>Polyphase.lib;Lua.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="Source\Assets\DialogueAsset.cpp" />
+    <ClCompile Include="Source\Assets\DialogueJson.cpp" />
+    <ClCompile Include="Source\DialogueCoreAddon.cpp" />
+    <ClCompile Include="Source\Editor\DialogueAssetViewer.cpp" />
+    <ClCompile Include="Source\Editor\DialoguePreviewWindow.cpp" />
+    <ClCompile Include="Source\Editor\DialogueValidator.cpp" />
+    <ClCompile Include="Source\Lua\DialogueRunner3D_Lua.cpp" />
+    <ClCompile Include="Source\Lua\Dialogue_Lua.cpp" />
+    <ClCompile Include="Source\Nodes\DialogueRunner3D.cpp" />
+    <ClCompile Include="Source\Runtime\DialogueEvents.cpp" />
+    <ClCompile Include="Source\Runtime\DialogueManager.cpp" />
+    <ClCompile Include="Source\Runtime\DialogueRunner.cpp" />
+    <ClCompile Include="Source\Runtime\DialogueVariableStore.cpp" />
+    <ClCompile Include="Source\Widgets\DialogueBoxWidget.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

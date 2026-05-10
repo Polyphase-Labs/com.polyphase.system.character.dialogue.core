@@ -1,0 +1,35 @@
+{
+    "configurations": [
+        {
+            "name": "Polyphase Addon",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "M:/Projects/Polyphase/Polyphase/CODE/mergePolyphase/polyphase-engine/Engine/Source",
+                "M:/Projects/Polyphase/Polyphase/CODE/mergePolyphase/polyphase-engine/Engine/Source/Engine",
+                "M:/Projects/Polyphase/Polyphase/CODE/mergePolyphase/polyphase-engine/Engine/Source/Plugins",
+                "M:/Projects/Polyphase/Polyphase/CODE/mergePolyphase/polyphase-engine/External/Lua",
+                "M:/Projects/Polyphase/Polyphase/CODE/mergePolyphase/polyphase-engine/External/glm",
+                "M:/Projects/Polyphase/Polyphase/CODE/mergePolyphase/polyphase-engine/External/Imgui",
+                "M:/Projects/Polyphase/Polyphase/CODE/mergePolyphase/polyphase-engine/External/ImGuizmo",
+                "M:/Projects/Polyphase/Polyphase/CODE/mergePolyphase/polyphase-engine/External/bullet3/src",
+                "M:/Projects/Polyphase/Polyphase/CODE/mergePolyphase/polyphase-engine/External/Assimp",
+                "M:/Projects/Polyphase/Polyphase/CODE/mergePolyphase/polyphase-engine/External",
+                "${env:VULKAN_SDK}/Include"
+            ],
+            "defines": [
+                "OCTAVE_PLUGIN_EXPORT",
+                "EDITOR=1",
+                "LUA_ENABLED=1",
+                "GLM_FORCE_RADIANS",
+                "PLATFORM_WINDOWS=1",
+                "API_VULKAN=1",
+                "NOMINMAX",
+                "COMPOLYPHASESYSTEMCHARACTERDIALOGUECORE_EXPORTS"
+            ],
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64"
+        }
+    ],
+    "version": 4
+}
