@@ -1,3 +1,8 @@
+// Editor-only — referenced by DialogueAssetViewer.cpp (also editor-only) and
+// not pulled in by any runtime path. DialogueCoreAddon.cpp wraps editor
+// includes in #if EDITOR.
+#if EDITOR
+
 #include "Editor/DialogueValidator.hxx"
 
 #include <algorithm>
@@ -175,3 +180,5 @@ namespace DialogueAddon
         return out;
     }
 }
+
+#endif // EDITOR

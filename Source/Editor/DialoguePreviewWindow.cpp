@@ -1,3 +1,7 @@
+// Editor-only — ImGui isn't available on console targets (Wii / GCN / 3DS).
+// DialogueCoreAddon.cpp wraps every reference to this TU in #if EDITOR.
+#if EDITOR
+
 #include "Editor/DialoguePreviewWindow.hxx"
 
 #include "Assets/DialogueAsset.hxx"
@@ -239,3 +243,5 @@ namespace DialogueAddon
         }
     }
 }
+
+#endif // EDITOR
