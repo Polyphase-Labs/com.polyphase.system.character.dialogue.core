@@ -143,7 +143,6 @@ cl /nologo /EHsc /O2 /MD /LD ^
     !INCLUDE_FLAGS! ^
     !ENGINE_DEFINES! ^
     /Fe:"%ADDON_NAME%.dll" ^
-    /Fo:"%ADDON_NAME%_" ^
     /D "OCTAVE_PLUGIN_EXPORT" ^
     /D "NDEBUG" ^
     /D "PLATFORM_WINDOWS=1" ^
@@ -183,7 +182,6 @@ cl /nologo /EHsc /Od /MDd /LD /Zi ^
     !INCLUDE_FLAGS! ^
     !ENGINE_DEFINES! ^
     /Fe:"%ADDON_NAME%.dll" ^
-    /Fo:"%ADDON_NAME%_" ^
     /Fd:"%ADDON_NAME%.pdb" ^
     /D "OCTAVE_PLUGIN_EXPORT" ^
     /D "_DEBUG" ^
