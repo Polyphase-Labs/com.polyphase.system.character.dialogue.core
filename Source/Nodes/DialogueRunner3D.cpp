@@ -20,6 +20,61 @@ DEFINE_NODE(DialogueRunner3D, Node3D);
 namespace
 {
     const std::string kEmptyString;
+
+    // Parse "Fn(arg1, arg2, ...)" into (funcName, args). Returns false if the
+    // string isn't a function-style event (no parens, or malformed). Args are
+    // trimmed of whitespace and have surrounding double-quotes stripped.
+    // Deliberately simple: no nested calls, no escape sequences. Console-safe.
+    bool ParseEventCall(const std::string& raw, std::string& outName, std::vector<std::string>& outArgs)
+    {
+        outName.clear();
+        outArgs.clear();
+        if (raw.empty()) return false;
+
+        const std::size_t lparen = raw.find('(');
+        if (lparen == std::string::npos) return false;
+        if (raw.back() != ')') return false;
+
+        outName = raw.substr(0, lparen);
+        // Strip whitespace from the function name.
+        while (!outName.empty() && (outName.front() == ' ' || outName.front() == '\t')) outName.erase(outName.begin());
+        while (!outName.empty() && (outName.back()  == ' ' || outName.back()  == '\t')) outName.pop_back();
+        if (outName.empty()) return false;
+
+        const std::string inside = raw.substr(lparen + 1, raw.size() - lparen - 2);
+        if (inside.empty()) return true;  // Fn() — name only, no args
+
+        std::string current;
+        for (std::size_t i = 0; i < inside.size(); ++i)
+        {
+            const char c = inside[i];
+            if (c == ',')
+            {
+                // Trim + strip quotes
+                while (!current.empty() && (current.front() == ' ' || current.front() == '\t')) current.erase(current.begin());
+                while (!current.empty() && (current.back()  == ' ' || current.back()  == '\t')) current.pop_back();
+                if (current.size() >= 2 && current.front() == '"' && current.back() == '"')
+                {
+                    current = current.substr(1, current.size() - 2);
+                }
+                outArgs.push_back(std::move(current));
+                current.clear();
+            }
+            else
+            {
+                current.push_back(c);
+            }
+        }
+        // Last arg
+        while (!current.empty() && (current.front() == ' ' || current.front() == '\t')) current.erase(current.begin());
+        while (!current.empty() && (current.back()  == ' ' || current.back()  == '\t')) current.pop_back();
+        if (current.size() >= 2 && current.front() == '"' && current.back() == '"')
+        {
+            current = current.substr(1, current.size() - 2);
+        }
+        outArgs.push_back(std::move(current));
+        return true;
+    }
 }
 
 DialogueRunner3D::DialogueRunner3D()
@@ -161,7 +216,24 @@ void DialogueRunner3D::RebindRunner()
     cb.OnEvent = [this](const std::string& eventName)
     {
         const std::string assetName = (mDialogueAsset.Get() != nullptr) ? mDialogueAsset.Get()->GetName() : std::string();
-        DialogueAddon::DialogueEventDispatcher::Get().Fire(eventName, assetName);
+
+        // If the event name parses as "Fn(arg,arg)" route to native handlers
+        // registered by character-system addons. Use the parsed func name as
+        // the event id for both native and Lua dispatch so listeners can
+        // subscribe by the bare name (e.g. "TriggerBark") and ignore args
+        // they don't care about.
+        std::string  parsedName;
+        std::vector<std::string> parsedArgs;
+        if (ParseEventCall(eventName, parsedName, parsedArgs))
+        {
+            DialogueAddon::DialogueEventDispatcher::Get().DispatchNative(parsedName, parsedArgs);
+            DialogueAddon::DialogueEventDispatcher::Get().Fire(parsedName, assetName, parsedArgs);
+        }
+        else
+        {
+            DialogueAddon::DialogueEventDispatcher::Get().Fire(eventName, assetName);
+        }
+
         std::vector<Datum> args;
         args.emplace_back(Datum(eventName));
         EmitSignal("OnDialogueEvent", args);

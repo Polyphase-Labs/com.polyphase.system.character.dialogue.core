@@ -45,7 +45,7 @@
     <PolyphasePath Condition="'$(PolyphasePath)' == '' and '$(POLYPHASE_PATH)' != ''">$(POLYPHASE_PATH)</PolyphasePath>
     <PolyphasePath Condition="'$(PolyphasePath)' == '' and '$(PolyphaseDevPath)' != ''">$(PolyphaseDevPath)</PolyphasePath>
     <!-- Relative layout from generation: addon ../engine -->
-    <PolyphasePath Condition="'$(PolyphasePath)' == '' and Exists('$(ProjectDir)..\..\..\..\Polyphase\CODE\mergePolyphase\polyphase-engine\Polyphase.sln')">$([System.IO.Path]::GetFullPath('$(ProjectDir)..\..\..\..\Polyphase\CODE\mergePolyphase\polyphase-engine'))</PolyphasePath>
+    <PolyphasePath Condition="'$(PolyphasePath)' == '' and Exists('$(ProjectDir)..\..\..\..\..\Polyphase\CODE\mergePolyphase\polyphase-engine\Polyphase.sln')">$([System.IO.Path]::GetFullPath('$(ProjectDir)..\..\..\..\..\Polyphase\CODE\mergePolyphase\polyphase-engine'))</PolyphasePath>
     <PolyphasePath Condition="'$(PolyphasePath)' == '' and Exists('$(ProjectDir)..\Polyphase.sln')">$([System.IO.Path]::GetFullPath('$(ProjectDir)..'))</PolyphasePath>
     <PolyphasePath Condition="'$(PolyphasePath)' == '' and Exists('$(ProjectDir)..\..\Polyphase.sln')">$([System.IO.Path]::GetFullPath('$(ProjectDir)..\..'))</PolyphasePath>
     <PolyphasePath Condition="'$(PolyphasePath)' == '' and Exists('$(ProjectDir)..\..\..\Polyphase.sln')">$([System.IO.Path]::GetFullPath('$(ProjectDir)..\..\..'))</PolyphasePath>

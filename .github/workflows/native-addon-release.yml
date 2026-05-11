@@ -1,0 +1,108 @@
+# Native Addon Release Workflow
+# Triggers on tags matching v*
+# Builds for Windows and Linux, publishes release assets
+#
+# Usage:
+#   1. Copy this file along with build.bat and build.sh to your addon's root
+#   2. Copy this workflow file to .github/workflows/
+#   3. Update the ADDON_NAME env variable below
+#   4. Tag a release: git tag v1.0.0 && git push origin v1.0.0
+#
+# Local testing:
+#   Windows: Run build.bat from the addon root
+#   Linux:   Run ./build.sh from the addon root
+
+name: Native Addon Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  # Change this to your addon's binary name (without extension)
+  ADDON_NAME: myaddon
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: Windows
+            arch: x64
+            extension: .dll
+            lib_prefix: ""
+          - os: ubuntu-latest
+            platform: Linux
+            arch: x64
+            extension: .so
+            lib_prefix: "lib"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSVC (Windows)
+        if: matrix.platform == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build (Windows)
+        if: matrix.platform == 'Windows'
+        shell: cmd
+        run: call build.bat
+
+      - name: Build (Linux)
+        if: matrix.platform == 'Linux'
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ADDON_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            build/${{ matrix.platform }}/${{ matrix.arch }}/${{ matrix.lib_prefix }}${{ env.ADDON_NAME }}${{ matrix.extension }}
+            build/${{ matrix.platform }}/${{ matrix.arch }}/*.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          for dir in artifacts/*/; do
+            platform_arch=$(basename "$dir")
+            for file in "$dir"*; do
+              if [ -f "$file" ]; then
+                filename=$(basename "$file")
+                if [[ "$filename" == *.dll ]] || [[ "$filename" == *.so ]]; then
+                  ext="${filename##*.}"
+                  base="${filename%.*}"
+                  cp "$file" "release/${base}-${platform_arch}.${ext}"
+                else
+                  cp "$file" "release/"
+                fi
+              fi
+            done
+          done
+          ls -la release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/*
+          generate_release_notes: true
