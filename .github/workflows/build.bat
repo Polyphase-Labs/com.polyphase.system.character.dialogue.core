@@ -6,6 +6,9 @@ REM Usage: build.bat [binary_name] [config]
 REM   binary_name - Optional. Defaults to folder name if not specified.
 REM   config      - Optional. "Debug", "Release", or "Both" (default: Both)
 REM
+REM Environment:
+REM   POLYPHASE_PATH - Path to Polyphase engine installation (required for engine headers)
+REM
 REM Requirements:
 REM   - Visual Studio with C++ tools installed
 REM   - Run from a "Developer Command Prompt" or ensure cl.exe is in PATH
@@ -40,10 +43,15 @@ echo  Configuration: %BUILD_CONFIG%
 echo ========================================
 echo.
 
+REM Determine addon root (script may be in .github/workflows/ or addon root)
+set "ADDON_ROOT=."
+if exist "..\..\Source" set "ADDON_ROOT=..\..\"
+if exist "..\..\package.json" set "ADDON_ROOT=..\..\"
+
 REM Check for Source directory
-if not exist "Source" (
+if not exist "%ADDON_ROOT%Source" (
     echo ERROR: Source directory not found!
-    echo Make sure you're running this from the addon root folder.
+    echo Make sure you're running this from the addon root folder or .github\workflows\.
     exit /b 1
 )
 
@@ -63,9 +71,11 @@ if errorlevel 1 (
 
 REM Gather all .cpp files
 set "SOURCES="
+pushd "%ADDON_ROOT%"
 for /r "Source" %%f in (*.cpp) do (
     set "SOURCES=!SOURCES! "%%f""
 )
+popd
 
 if "!SOURCES!"=="" (
     echo ERROR: No .cpp files found in Source directory!
@@ -73,10 +83,36 @@ if "!SOURCES!"=="" (
 )
 
 echo Found source files:
+pushd "%ADDON_ROOT%"
 for /r "Source" %%f in (*.cpp) do (
     echo   %%~nxf
 )
+popd
 echo.
+
+REM Build include paths
+set "INCLUDE_FLAGS=/I"%ADDON_ROOT%Source""
+
+if defined POLYPHASE_PATH (
+    echo Using Polyphase engine at: %POLYPHASE_PATH%
+    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\Engine\Source""
+    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\Engine\Source\Engine""
+    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\Engine\Source\Plugins""
+    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External\Lua""
+    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External\glm""
+    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External\Imgui""
+    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External\ImGuizmo""
+    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External\bullet3\src""
+    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External""
+    echo.
+) else (
+    echo Note: POLYPHASE_PATH not set. Only addon Source\ will be included.
+    echo       Set POLYPHASE_PATH for addons that use engine headers.
+    echo.
+)
+
+REM Set build output directory relative to addon root
+set "BUILD_DIR=%ADDON_ROOT%build"
 
 set "BUILD_FAILED=0"
 
@@ -91,11 +127,11 @@ echo Building Release configuration...
 echo ----------------------------------------
 echo.
 
-if not exist "build\Windows\x64\Release" mkdir "build\Windows\x64\Release"
-pushd build\Windows\x64\Release
+if not exist "%BUILD_DIR%\Windows\x64\Release" mkdir "%BUILD_DIR%\Windows\x64\Release"
+pushd "%BUILD_DIR%\Windows\x64\Release"
 
 cl /nologo /EHsc /O2 /MD /LD ^
-    /I"..\..\..\..\Source" ^
+    !INCLUDE_FLAGS! ^
     /Fe:"%ADDON_NAME%.dll" ^
     /Fo:"%ADDON_NAME%_" ^
     /D "OCTAVE_PLUGIN_EXPORT" ^
@@ -112,10 +148,10 @@ if errorlevel 1 (
 )
 
 popd
-echo Release build succeeded: build\Windows\x64\Release\%ADDON_NAME%.dll
+echo Release build succeeded: %BUILD_DIR%\Windows\x64\Release\%ADDON_NAME%.dll
 
 REM Generate Release checksum
-certutil -hashfile "build\Windows\x64\Release\%ADDON_NAME%.dll" SHA256 > "build\Windows\x64\Release\%ADDON_NAME%-Windows-x64-Release.sha256" 2>nul
+certutil -hashfile "%BUILD_DIR%\Windows\x64\Release\%ADDON_NAME%.dll" SHA256 > "%BUILD_DIR%\Windows\x64\Release\%ADDON_NAME%-Windows-x64-Release.sha256" 2>nul
 echo.
 
 :CheckDebug
@@ -130,11 +166,11 @@ echo Building Debug configuration...
 echo ----------------------------------------
 echo.
 
-if not exist "build\Windows\x64\Debug" mkdir "build\Windows\x64\Debug"
-pushd build\Windows\x64\Debug
+if not exist "%BUILD_DIR%\Windows\x64\Debug" mkdir "%BUILD_DIR%\Windows\x64\Debug"
+pushd "%BUILD_DIR%\Windows\x64\Debug"
 
 cl /nologo /EHsc /Od /MDd /LD /Zi ^
-    /I"..\..\..\..\Source" ^
+    !INCLUDE_FLAGS! ^
     /Fe:"%ADDON_NAME%.dll" ^
     /Fo:"%ADDON_NAME%_" ^
     /Fd:"%ADDON_NAME%.pdb" ^
@@ -152,10 +188,10 @@ if errorlevel 1 (
 )
 
 popd
-echo Debug build succeeded: build\Windows\x64\Debug\%ADDON_NAME%.dll
+echo Debug build succeeded: %BUILD_DIR%\Windows\x64\Debug\%ADDON_NAME%.dll
 
 REM Generate Debug checksum
-certutil -hashfile "build\Windows\x64\Debug\%ADDON_NAME%.dll" SHA256 > "build\Windows\x64\Debug\%ADDON_NAME%-Windows-x64-Debug.sha256" 2>nul
+certutil -hashfile "%BUILD_DIR%\Windows\x64\Debug\%ADDON_NAME%.dll" SHA256 > "%BUILD_DIR%\Windows\x64\Debug\%ADDON_NAME%-Windows-x64-Debug.sha256" 2>nul
 echo.
 
 :Summary
@@ -170,9 +206,10 @@ if "%BUILD_FAILED%"=="1" (
     echo ========================================
 
     REM Auto-update package.json with binary descriptors
-    if exist "package.json" (
+    if exist "%ADDON_ROOT%package.json" (
         echo.
         echo Updating package.json with binary descriptors...
+        pushd "%ADDON_ROOT%"
         powershell -NoProfile -ExecutionPolicy Bypass -Command ^
             "$pkg = Get-Content 'package.json' -Raw | ConvertFrom-Json; " ^
             "$binaries = @(); " ^
@@ -193,10 +230,11 @@ if "%BUILD_FAILED%"=="1" (
             "  $pkg | ConvertTo-Json -Depth 10 | Set-Content 'package.json' -Encoding UTF8; " ^
             "  Write-Host '  Added Windows binary descriptors to package.json' " ^
             "}"
+        popd
     )
 )
 echo.
-echo Output directory: build\Windows\x64\
+echo Output directory: %BUILD_DIR%\Windows\x64\
 if /i "%BUILD_CONFIG%"=="Both" (
     echo   Release\%ADDON_NAME%.dll
     echo   Debug\%ADDON_NAME%.dll

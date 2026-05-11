@@ -6,6 +6,9 @@
 #   binary_name - Optional. Defaults to folder name if not specified.
 #   config      - Optional. "Debug", "Release", or "Both" (default: Both)
 #
+# Environment:
+#   POLYPHASE_PATH - Path to Polyphase engine installation (required for engine headers)
+#
 # Requirements:
 #   - g++ or clang++ installed
 #   - Standard C++ development libraries
@@ -30,12 +33,22 @@ echo " Configuration: $BUILD_CONFIG"
 echo "========================================"
 echo ""
 
+# Determine addon root (script may be in .github/workflows/ or addon root)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ADDON_ROOT="."
+if [ -d "$SCRIPT_DIR/../../Source" ]; then
+    ADDON_ROOT="$SCRIPT_DIR/../.."
+fi
+
 # Check for Source directory
-if [ ! -d "Source" ]; then
+if [ ! -d "$ADDON_ROOT/Source" ]; then
     echo "ERROR: Source directory not found!"
-    echo "Make sure you're running this from the addon root folder."
+    echo "Make sure you're running this from the addon root folder or .github/workflows/."
     exit 1
 fi
+
+# Set build output directory
+BUILD_DIR="$ADDON_ROOT/build"
 
 # Check for compiler
 if command -v g++ &> /dev/null; then
@@ -56,7 +69,7 @@ echo "Using compiler: $CXX"
 echo ""
 
 # Gather all .cpp files
-SOURCES=$(find Source -name "*.cpp" -type f)
+SOURCES=$(find "$ADDON_ROOT/Source" -name "*.cpp" -type f)
 
 if [ -z "$SOURCES" ]; then
     echo "ERROR: No .cpp files found in Source directory!"
@@ -68,6 +81,27 @@ for f in $SOURCES; do
     echo "  $(basename $f)"
 done
 echo ""
+
+# Build include paths
+INCLUDE_FLAGS="-I$ADDON_ROOT/Source"
+
+if [ -n "$POLYPHASE_PATH" ]; then
+    echo "Using Polyphase engine at: $POLYPHASE_PATH"
+    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/Engine/Source"
+    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/Engine/Source/Engine"
+    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/Engine/Source/Plugins"
+    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/Lua"
+    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/glm"
+    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/Imgui"
+    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/ImGuizmo"
+    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/bullet3/src"
+    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External"
+    echo ""
+else
+    echo "Note: POLYPHASE_PATH not set. Only addon Source/ will be included."
+    echo "      Set POLYPHASE_PATH for addons that use engine headers."
+    echo ""
+fi
 
 BUILD_FAILED=0
 
@@ -89,17 +123,17 @@ if [[ "$BUILD_CONFIG" == "Release" ]] || [[ "$BUILD_CONFIG" == "Both" ]]; then
     echo "----------------------------------------"
     echo ""
 
-    mkdir -p "build/Linux/x64/Release"
+    mkdir -p "$BUILD_DIR/Linux/x64/Release"
 
     if $CXX -shared -fPIC -O2 -std=c++17 \
-        -ISource \
+        $INCLUDE_FLAGS \
         -DOCTAVE_PLUGIN_EXPORT \
         -DNDEBUG \
         -DPLATFORM_LINUX=1 \
-        -o "build/Linux/x64/Release/lib${ADDON_NAME}.so" \
+        -o "$BUILD_DIR/Linux/x64/Release/lib${ADDON_NAME}.so" \
         $SOURCES; then
-        echo "Release build succeeded: build/Linux/x64/Release/lib${ADDON_NAME}.so"
-        generate_checksum "build/Linux/x64/Release/lib${ADDON_NAME}.so" "build/Linux/x64/Release/${ADDON_NAME}-Linux-x64-Release.sha256"
+        echo "Release build succeeded: $BUILD_DIR/Linux/x64/Release/lib${ADDON_NAME}.so"
+        generate_checksum "$BUILD_DIR/Linux/x64/Release/lib${ADDON_NAME}.so" "$BUILD_DIR/Linux/x64/Release/${ADDON_NAME}-Linux-x64-Release.sha256"
     else
         echo "Release build FAILED!"
         BUILD_FAILED=1
@@ -114,17 +148,17 @@ if [[ "$BUILD_CONFIG" == "Debug" ]] || [[ "$BUILD_CONFIG" == "Both" ]]; then
     echo "----------------------------------------"
     echo ""
 
-    mkdir -p "build/Linux/x64/Debug"
+    mkdir -p "$BUILD_DIR/Linux/x64/Debug"
 
     if $CXX -shared -fPIC -O0 -g -std=c++17 \
-        -ISource \
+        $INCLUDE_FLAGS \
         -DOCTAVE_PLUGIN_EXPORT \
         -D_DEBUG \
         -DPLATFORM_LINUX=1 \
-        -o "build/Linux/x64/Debug/lib${ADDON_NAME}.so" \
+        -o "$BUILD_DIR/Linux/x64/Debug/lib${ADDON_NAME}.so" \
         $SOURCES; then
-        echo "Debug build succeeded: build/Linux/x64/Debug/lib${ADDON_NAME}.so"
-        generate_checksum "build/Linux/x64/Debug/lib${ADDON_NAME}.so" "build/Linux/x64/Debug/${ADDON_NAME}-Linux-x64-Debug.sha256"
+        echo "Debug build succeeded: $BUILD_DIR/Linux/x64/Debug/lib${ADDON_NAME}.so"
+        generate_checksum "$BUILD_DIR/Linux/x64/Debug/lib${ADDON_NAME}.so" "$BUILD_DIR/Linux/x64/Debug/${ADDON_NAME}-Linux-x64-Debug.sha256"
     else
         echo "Debug build FAILED!"
         BUILD_FAILED=1
@@ -143,7 +177,7 @@ else
     echo "========================================"
 
     # Auto-update package.json with binary descriptors
-    if [ -f "package.json" ]; then
+    if [ -f "$ADDON_ROOT/package.json" ]; then
         echo ""
         echo "Updating package.json with binary descriptors..."
 
@@ -152,10 +186,10 @@ else
             TEMP_FILE=$(mktemp)
 
             # Start with existing binaries or empty array
-            cp package.json "$TEMP_FILE"
+            cp "$ADDON_ROOT/package.json" "$TEMP_FILE"
 
             # Add Release binary if built
-            if [ -f "build/Linux/x64/Release/lib${ADDON_NAME}.so" ]; then
+            if [ -f "$BUILD_DIR/Linux/x64/Release/lib${ADDON_NAME}.so" ]; then
                 jq --arg name "lib${ADDON_NAME}-Linux-x64-Release.so" \
                    'if .binaries == null then .binaries = [] else . end |
                     if (.binaries | map(select(.platform == "Linux" and .arch == "x64" and .config == "Release")) | length) == 0
@@ -164,29 +198,29 @@ else
             fi
 
             # Add Debug binary if built
-            if [ -f "build/Linux/x64/Debug/lib${ADDON_NAME}.so" ]; then
+            if [ -f "$BUILD_DIR/Linux/x64/Debug/lib${ADDON_NAME}.so" ]; then
                 jq --arg name "lib${ADDON_NAME}-Linux-x64-Debug.so" \
                    'if .binaries == null then .binaries = [] else . end |
                     if (.binaries | map(select(.platform == "Linux" and .arch == "x64" and .config == "Debug")) | length) == 0
                     then .binaries += [{"platform": "Linux", "arch": "x64", "config": "Debug", "type": "releaseAsset", "value": $name}]
-                    else . end' "$TEMP_FILE" > package.json.tmp && mv package.json.tmp package.json
+                    else . end' "$TEMP_FILE" > package.json.tmp && mv package.json.tmp "$ADDON_ROOT/package.json"
             else
-                mv "$TEMP_FILE" package.json
+                mv "$TEMP_FILE" "$ADDON_ROOT/package.json"
             fi
 
             echo "  Added Linux binary descriptors to package.json"
         else
             echo "  Note: Install jq for automatic package.json updates"
             echo "  Manual update needed - add these to package.json binaries array:"
-            [ -f "build/Linux/x64/Release/lib${ADDON_NAME}.so" ] && \
+            [ -f "$BUILD_DIR/Linux/x64/Release/lib${ADDON_NAME}.so" ] && \
                 echo "    {\"platform\": \"Linux\", \"arch\": \"x64\", \"config\": \"Release\", \"type\": \"releaseAsset\", \"value\": \"lib${ADDON_NAME}-Linux-x64-Release.so\"}"
-            [ -f "build/Linux/x64/Debug/lib${ADDON_NAME}.so" ] && \
+            [ -f "$BUILD_DIR/Linux/x64/Debug/lib${ADDON_NAME}.so" ] && \
                 echo "    {\"platform\": \"Linux\", \"arch\": \"x64\", \"config\": \"Debug\", \"type\": \"releaseAsset\", \"value\": \"lib${ADDON_NAME}-Linux-x64-Debug.so\"}"
         fi
     fi
 fi
 echo ""
-echo "Output directory: build/Linux/x64/"
+echo "Output directory: $BUILD_DIR/Linux/x64/"
 if [[ "$BUILD_CONFIG" == "Both" ]]; then
     echo "  Release/lib${ADDON_NAME}.so"
     echo "  Debug/lib${ADDON_NAME}.so"

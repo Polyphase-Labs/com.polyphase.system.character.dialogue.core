@@ -2,21 +2,21 @@
 # Triggers on tags matching v*
 # Builds Debug and Release for Windows and Linux, publishes release assets
 #
+# Addon name is read automatically from package.json (native.binaryName or name)
+#
 # Usage:
-#   1. Copy this file along with build.bat and build.sh to your addon's root
-#   2. Copy this workflow file to .github/workflows/
-#   3. Update the ADDON_NAME env variable below
-#   4. Tag a release: git tag v1.0.0 && git push origin v1.0.0
+#   1. Copy this entire .dev/workflows/ folder to your addon's .github/workflows/
+#   2. Tag a release: git tag v1.0.0 && git push origin v1.0.0
 #
 # Local testing:
-#   Windows: Run build.bat from the addon root (builds Both by default)
-#   Linux:   Run ./build.sh from the addon root (builds Both by default)
+#   Windows: set POLYPHASE_PATH=C:\path\to\engine && .github\workflows\build.bat
+#   Linux:   POLYPHASE_PATH=/path/to/engine ./.github/workflows/build.sh
 #
 # Output assets (4 binaries total):
-#   - MyAddon-Windows-x64-Release.dll
-#   - MyAddon-Windows-x64-Debug.dll
-#   - libMyAddon-Linux-x64-Release.so
-#   - libMyAddon-Linux-x64-Debug.so
+#   - <name>-Windows-x64-Release.dll
+#   - <name>-Windows-x64-Debug.dll
+#   - lib<name>-Linux-x64-Release.so
+#   - lib<name>-Linux-x64-Debug.so
 
 name: Native Addon Release
 
@@ -26,8 +26,8 @@ on:
       - 'v*'
 
 env:
-  # Change this to your addon's binary name (without extension)
-  ADDON_NAME: myaddon
+  # Polyphase engine repo for header access (leave as-is unless using a fork)
+  POLYPHASE_REPO: "Polyphase-Labs/Polyphase-Engine"
 
 jobs:
   build:
@@ -50,6 +50,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Read addon name from package.json
+        id: addon-info
+        run: |
+          ADDON_NAME=$(cat package.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('native',{}).get('binaryName') or d.get('name'))")
+          echo "ADDON_NAME=$ADDON_NAME" >> $GITHUB_ENV
+          echo "Addon name: $ADDON_NAME"
+        shell: bash
+
+      - name: Clone Polyphase Engine
+        run: git clone --depth 1 https://github.com/${{ env.POLYPHASE_REPO }}.git ../polyphase-engine
+        shell: bash
+
       - name: Setup MSVC (Windows)
         if: matrix.platform == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
@@ -59,14 +71,19 @@ jobs:
       - name: Build Both Configs (Windows)
         if: matrix.platform == 'Windows'
         shell: cmd
-        run: call ./.github/workflows/build.bat %ADDON_NAME% Both
+        run: |
+          if exist "..\polyphase-engine" set "POLYPHASE_PATH=..\polyphase-engine"
+          call .github\workflows\build.bat %ADDON_NAME% Both
 
       - name: Build Both Configs (Linux)
         if: matrix.platform == 'Linux'
         run: |
-          chmod +x ./.github/workflows/build.sh
+          chmod +x .github/workflows/build.sh
+          if [ -d "../polyphase-engine" ]; then
+            export POLYPHASE_PATH="../polyphase-engine"
+          fi
           ./.github/workflows/build.sh "$ADDON_NAME" Both
-          
+
       - name: Upload Release artifact
         uses: actions/upload-artifact@v4
         with:
@@ -92,6 +109,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Read addon name from package.json
+        run: |
+          ADDON_NAME=$(cat package.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('native',{}).get('binaryName') or d.get('name'))")
+          echo "ADDON_NAME=$ADDON_NAME" >> $GITHUB_ENV
+          echo "Addon name: $ADDON_NAME"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
