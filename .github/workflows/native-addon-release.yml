@@ -1,6 +1,6 @@
 # Native Addon Release Workflow
 # Triggers on tags matching v*
-# Builds for Windows and Linux, publishes release assets
+# Builds Debug and Release for Windows and Linux, publishes release assets
 #
 # Usage:
 #   1. Copy this file along with build.bat and build.sh to your addon's root
@@ -9,8 +9,14 @@
 #   4. Tag a release: git tag v1.0.0 && git push origin v1.0.0
 #
 # Local testing:
-#   Windows: Run build.bat from the addon root
-#   Linux:   Run ./build.sh from the addon root
+#   Windows: Run build.bat from the addon root (builds Both by default)
+#   Linux:   Run ./build.sh from the addon root (builds Both by default)
+#
+# Output assets (4 binaries total):
+#   - MyAddon-Windows-x64-Release.dll
+#   - MyAddon-Windows-x64-Debug.dll
+#   - libMyAddon-Linux-x64-Release.so
+#   - libMyAddon-Linux-x64-Debug.so
 
 name: Native Addon Release
 
@@ -50,24 +56,33 @@ jobs:
         with:
           arch: x64
 
-      - name: Build (Windows)
+      - name: Build Both Configs (Windows)
         if: matrix.platform == 'Windows'
         shell: cmd
-        run: call build.bat
+        run: call ./.github/workflows/build.bat %ADDON_NAME% Both
 
-      - name: Build (Linux)
+      - name: Build Both Configs (Linux)
         if: matrix.platform == 'Linux'
         run: |
-          chmod +x build.sh
-          ./build.sh
-
-      - name: Upload artifact
+          chmod +x ./.github/workflows/build.sh
+          ./.github/workflows/build.sh "$ADDON_NAME" Both
+          
+      - name: Upload Release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ADDON_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}
+          name: ${{ env.ADDON_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}-Release
           path: |
-            build/${{ matrix.platform }}/${{ matrix.arch }}/${{ matrix.lib_prefix }}${{ env.ADDON_NAME }}${{ matrix.extension }}
-            build/${{ matrix.platform }}/${{ matrix.arch }}/*.sha256
+            build/${{ matrix.platform }}/${{ matrix.arch }}/Release/${{ matrix.lib_prefix }}${{ env.ADDON_NAME }}${{ matrix.extension }}
+            build/${{ matrix.platform }}/${{ matrix.arch }}/Release/*.sha256
+
+      - name: Upload Debug artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ADDON_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}-Debug
+          path: |
+            build/${{ matrix.platform }}/${{ matrix.arch }}/Debug/${{ matrix.lib_prefix }}${{ env.ADDON_NAME }}${{ matrix.extension }}
+            build/${{ matrix.platform }}/${{ matrix.arch }}/Debug/*.sha256
+            build/${{ matrix.platform }}/${{ matrix.arch }}/Debug/*.pdb
 
   release:
     needs: build
@@ -76,29 +91,84 @@ jobs:
       contents: write
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
+      - name: Update package.json with binary descriptors
+        run: |
+          # Install jq for JSON manipulation
+          sudo apt-get install -y jq
+
+          # Build the binaries array based on what was built
+          BINARIES="[]"
+
+          # Check for Windows Release
+          if [ -f "artifacts/${{ env.ADDON_NAME }}-Windows-x64-Release/${{ env.ADDON_NAME }}.dll" ]; then
+            BINARIES=$(echo "$BINARIES" | jq '. += [{"platform": "Windows", "arch": "x64", "config": "Release", "type": "releaseAsset", "value": "${{ env.ADDON_NAME }}-Windows-x64-Release.dll"}]')
+          fi
+
+          # Check for Windows Debug
+          if [ -f "artifacts/${{ env.ADDON_NAME }}-Windows-x64-Debug/${{ env.ADDON_NAME }}.dll" ]; then
+            BINARIES=$(echo "$BINARIES" | jq '. += [{"platform": "Windows", "arch": "x64", "config": "Debug", "type": "releaseAsset", "value": "${{ env.ADDON_NAME }}-Windows-x64-Debug.dll"}]')
+          fi
+
+          # Check for Linux Release
+          if [ -f "artifacts/${{ env.ADDON_NAME }}-Linux-x64-Release/lib${{ env.ADDON_NAME }}.so" ]; then
+            BINARIES=$(echo "$BINARIES" | jq '. += [{"platform": "Linux", "arch": "x64", "config": "Release", "type": "releaseAsset", "value": "lib${{ env.ADDON_NAME }}-Linux-x64-Release.so"}]')
+          fi
+
+          # Check for Linux Debug
+          if [ -f "artifacts/${{ env.ADDON_NAME }}-Linux-x64-Debug/lib${{ env.ADDON_NAME }}.so" ]; then
+            BINARIES=$(echo "$BINARIES" | jq '. += [{"platform": "Linux", "arch": "x64", "config": "Debug", "type": "releaseAsset", "value": "lib${{ env.ADDON_NAME }}-Linux-x64-Debug.so"}]')
+          fi
+
+          # Update package.json
+          jq --argjson binaries "$BINARIES" '.binaries = $binaries | .resolveMode = "binary"' package.json > package.json.updated
+          mv package.json.updated package.json
+
+          echo "Updated package.json:"
+          cat package.json
+
       - name: Prepare release files
         run: |
           mkdir -p release
           for dir in artifacts/*/; do
-            platform_arch=$(basename "$dir")
+            # Extract platform-arch-config from artifact name (e.g., myaddon-Windows-x64-Release)
+            artifact_name=$(basename "$dir")
+            # Parse out the config (last part after last hyphen)
+            config="${artifact_name##*-}"
+            # Get the platform-arch part
+            platform_arch="${artifact_name%-*}"
+            platform_arch="${platform_arch#*-}"  # Remove addon name prefix
+
             for file in "$dir"*; do
               if [ -f "$file" ]; then
                 filename=$(basename "$file")
-                if [[ "$filename" == *.dll ]] || [[ "$filename" == *.so ]]; then
-                  ext="${filename##*.}"
-                  base="${filename%.*}"
-                  cp "$file" "release/${base}-${platform_arch}.${ext}"
+                if [[ "$filename" == *.dll ]]; then
+                  base="${filename%.dll}"
+                  cp "$file" "release/${base}-${platform_arch}-${config}.dll"
+                elif [[ "$filename" == *.so ]]; then
+                  base="${filename%.so}"
+                  cp "$file" "release/${base}-${platform_arch}-${config}.so"
+                elif [[ "$filename" == *.pdb ]]; then
+                  base="${filename%.pdb}"
+                  cp "$file" "release/${base}-${platform_arch}-${config}.pdb"
                 else
+                  # Checksums and other files
                   cp "$file" "release/"
                 fi
               fi
             done
           done
+
+          # Include updated package.json in release
+          cp package.json "release/package.json"
+
+          echo "Release files:"
           ls -la release/
 
       - name: Create Release

@@ -2,18 +2,17 @@
 # Native Addon Build Script for Linux/macOS
 # Run this from the root of your addon folder (where package.json is)
 #
-# Usage: ./build.sh [binary_name]
+# Usage: ./build.sh [binary_name] [config]
 #   binary_name - Optional. Defaults to folder name if not specified.
+#   config      - Optional. "Debug", "Release", or "Both" (default: Both)
 #
 # Requirements:
 #   - g++ or clang++ installed
 #   - Standard C++ development libraries
 #
 # Output:
-#   build/Linux/x64/lib<binary_name>.so
-#   build/Linux/x64/<binary_name>-Linux-x64.sha256
-
-set -e
+#   build/Linux/x64/Release/lib<binary_name>.so
+#   build/Linux/x64/Debug/lib<binary_name>.so
 
 # Get addon folder name as default binary name
 FOLDER_NAME=$(basename "$(pwd)")
@@ -21,9 +20,13 @@ FOLDER_NAME=$(basename "$(pwd)")
 # Use argument or default to folder name
 ADDON_NAME="${1:-$FOLDER_NAME}"
 
+# Config: Debug, Release, or Both (default)
+BUILD_CONFIG="${2:-Both}"
+
 echo ""
 echo "========================================"
 echo " Building Native Addon: $ADDON_NAME"
+echo " Configuration: $BUILD_CONFIG"
 echo "========================================"
 echo ""
 
@@ -33,9 +36,6 @@ if [ ! -d "Source" ]; then
     echo "Make sure you're running this from the addon root folder."
     exit 1
 fi
-
-# Create build directory
-mkdir -p build/Linux/x64
 
 # Check for compiler
 if command -v g++ &> /dev/null; then
@@ -69,44 +69,138 @@ for f in $SOURCES; do
 done
 echo ""
 
-# Build Release version
-echo "Building Release configuration..."
-echo ""
+BUILD_FAILED=0
 
-$CXX -shared -fPIC -O2 -std=c++17 \
-    -ISource \
-    -DOCTAVE_PLUGIN_EXPORT \
-    -DNDEBUG \
-    -DPLATFORM_LINUX=1 \
-    -o "build/Linux/x64/lib${ADDON_NAME}.so" \
-    $SOURCES
+# Function to generate checksum
+generate_checksum() {
+    local file="$1"
+    local checksum_file="$2"
+    if command -v sha256sum &> /dev/null; then
+        sha256sum "$file" > "$checksum_file"
+    elif command -v shasum &> /dev/null; then
+        shasum -a 256 "$file" > "$checksum_file"
+    fi
+}
 
-echo ""
-echo "========================================"
-echo " Build Succeeded!"
-echo "========================================"
-echo ""
-echo "Output: build/Linux/x64/lib${ADDON_NAME}.so"
-echo ""
+# Build Release if requested
+if [[ "$BUILD_CONFIG" == "Release" ]] || [[ "$BUILD_CONFIG" == "Both" ]]; then
+    echo "----------------------------------------"
+    echo "Building Release configuration..."
+    echo "----------------------------------------"
+    echo ""
 
-# Generate checksum
-echo "Generating SHA256 checksum..."
-if command -v sha256sum &> /dev/null; then
-    sha256sum "build/Linux/x64/lib${ADDON_NAME}.so" > "build/Linux/x64/${ADDON_NAME}-Linux-x64.sha256"
-    echo "Checksum: build/Linux/x64/${ADDON_NAME}-Linux-x64.sha256"
-    cat "build/Linux/x64/${ADDON_NAME}-Linux-x64.sha256"
-elif command -v shasum &> /dev/null; then
-    shasum -a 256 "build/Linux/x64/lib${ADDON_NAME}.so" > "build/Linux/x64/${ADDON_NAME}-Linux-x64.sha256"
-    echo "Checksum: build/Linux/x64/${ADDON_NAME}-Linux-x64.sha256"
-    cat "build/Linux/x64/${ADDON_NAME}-Linux-x64.sha256"
+    mkdir -p "build/Linux/x64/Release"
+
+    if $CXX -shared -fPIC -O2 -std=c++17 \
+        -ISource \
+        -DOCTAVE_PLUGIN_EXPORT \
+        -DNDEBUG \
+        -DPLATFORM_LINUX=1 \
+        -o "build/Linux/x64/Release/lib${ADDON_NAME}.so" \
+        $SOURCES; then
+        echo "Release build succeeded: build/Linux/x64/Release/lib${ADDON_NAME}.so"
+        generate_checksum "build/Linux/x64/Release/lib${ADDON_NAME}.so" "build/Linux/x64/Release/${ADDON_NAME}-Linux-x64-Release.sha256"
+    else
+        echo "Release build FAILED!"
+        BUILD_FAILED=1
+    fi
+    echo ""
+fi
+
+# Build Debug if requested
+if [[ "$BUILD_CONFIG" == "Debug" ]] || [[ "$BUILD_CONFIG" == "Both" ]]; then
+    echo "----------------------------------------"
+    echo "Building Debug configuration..."
+    echo "----------------------------------------"
+    echo ""
+
+    mkdir -p "build/Linux/x64/Debug"
+
+    if $CXX -shared -fPIC -O0 -g -std=c++17 \
+        -ISource \
+        -DOCTAVE_PLUGIN_EXPORT \
+        -D_DEBUG \
+        -DPLATFORM_LINUX=1 \
+        -o "build/Linux/x64/Debug/lib${ADDON_NAME}.so" \
+        $SOURCES; then
+        echo "Debug build succeeded: build/Linux/x64/Debug/lib${ADDON_NAME}.so"
+        generate_checksum "build/Linux/x64/Debug/lib${ADDON_NAME}.so" "build/Linux/x64/Debug/${ADDON_NAME}-Linux-x64-Debug.sha256"
+    else
+        echo "Debug build FAILED!"
+        BUILD_FAILED=1
+    fi
+    echo ""
 fi
 
 echo ""
+if [ $BUILD_FAILED -eq 1 ]; then
+    echo "========================================"
+    echo " BUILD COMPLETED WITH ERRORS"
+    echo "========================================"
+else
+    echo "========================================"
+    echo " Build Succeeded!"
+    echo "========================================"
+
+    # Auto-update package.json with binary descriptors
+    if [ -f "package.json" ]; then
+        echo ""
+        echo "Updating package.json with binary descriptors..."
+
+        if command -v jq &> /dev/null; then
+            # Use jq for proper JSON manipulation
+            TEMP_FILE=$(mktemp)
+
+            # Start with existing binaries or empty array
+            cp package.json "$TEMP_FILE"
+
+            # Add Release binary if built
+            if [ -f "build/Linux/x64/Release/lib${ADDON_NAME}.so" ]; then
+                jq --arg name "lib${ADDON_NAME}-Linux-x64-Release.so" \
+                   'if .binaries == null then .binaries = [] else . end |
+                    if (.binaries | map(select(.platform == "Linux" and .arch == "x64" and .config == "Release")) | length) == 0
+                    then .binaries += [{"platform": "Linux", "arch": "x64", "config": "Release", "type": "releaseAsset", "value": $name}]
+                    else . end' "$TEMP_FILE" > package.json.tmp && mv package.json.tmp "$TEMP_FILE"
+            fi
+
+            # Add Debug binary if built
+            if [ -f "build/Linux/x64/Debug/lib${ADDON_NAME}.so" ]; then
+                jq --arg name "lib${ADDON_NAME}-Linux-x64-Debug.so" \
+                   'if .binaries == null then .binaries = [] else . end |
+                    if (.binaries | map(select(.platform == "Linux" and .arch == "x64" and .config == "Debug")) | length) == 0
+                    then .binaries += [{"platform": "Linux", "arch": "x64", "config": "Debug", "type": "releaseAsset", "value": $name}]
+                    else . end' "$TEMP_FILE" > package.json.tmp && mv package.json.tmp package.json
+            else
+                mv "$TEMP_FILE" package.json
+            fi
+
+            echo "  Added Linux binary descriptors to package.json"
+        else
+            echo "  Note: Install jq for automatic package.json updates"
+            echo "  Manual update needed - add these to package.json binaries array:"
+            [ -f "build/Linux/x64/Release/lib${ADDON_NAME}.so" ] && \
+                echo "    {\"platform\": \"Linux\", \"arch\": \"x64\", \"config\": \"Release\", \"type\": \"releaseAsset\", \"value\": \"lib${ADDON_NAME}-Linux-x64-Release.so\"}"
+            [ -f "build/Linux/x64/Debug/lib${ADDON_NAME}.so" ] && \
+                echo "    {\"platform\": \"Linux\", \"arch\": \"x64\", \"config\": \"Debug\", \"type\": \"releaseAsset\", \"value\": \"lib${ADDON_NAME}-Linux-x64-Debug.so\"}"
+        fi
+    fi
+fi
+echo ""
+echo "Output directory: build/Linux/x64/"
+if [[ "$BUILD_CONFIG" == "Both" ]]; then
+    echo "  Release/lib${ADDON_NAME}.so"
+    echo "  Debug/lib${ADDON_NAME}.so"
+else
+    echo "  ${BUILD_CONFIG}/lib${ADDON_NAME}.so"
+fi
+echo ""
 echo "----------------------------------------"
 echo "To test in Polyphase:"
-echo "  1. Copy build/Linux/x64/lib${ADDON_NAME}.so to your project's"
+echo "  1. Copy the appropriate .so to your project's"
 echo "     Intermediate/Plugins/${ADDON_NAME}/Synced/ folder"
 echo "  2. Set the addon to Binary mode in the Addons window"
 echo "  3. Click Reload to load the binary"
 echo "----------------------------------------"
 echo ""
+
+exit $BUILD_FAILED
