@@ -47,6 +47,12 @@ REM Determine addon root (script may be in .github/workflows/ or addon root)
 set "ADDON_ROOT=."
 if exist "..\..\Source" if exist "..\..\package.json" set "ADDON_ROOT=..\.."
 
+REM Resolve ADDON_ROOT to an absolute path so include flags survive pushd into the build dir
+for %%I in ("%ADDON_ROOT%") do set "ADDON_ROOT=%%~fI"
+
+REM Resolve POLYPHASE_PATH to absolute (same reason)
+if defined POLYPHASE_PATH for %%I in ("%POLYPHASE_PATH%") do set "POLYPHASE_PATH=%%~fI"
+
 REM Check for Source directory
 if not exist "%ADDON_ROOT%\Source" (
     echo ERROR: Source directory not found!
