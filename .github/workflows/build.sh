@@ -89,18 +89,25 @@ if [ -n "$POLYPHASE_PATH" ]; then
     echo "Using Polyphase engine at: $POLYPHASE_PATH"
     INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/Engine/Source"
     INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/Engine/Source/Engine"
+    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/Engine/Source/Editor"
     INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/Engine/Source/Plugins"
+    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External"
+    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/Assimp"
+    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/Bullet"
     INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/Lua"
     INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/glm"
     INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/Imgui"
     INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/ImGuizmo"
-    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/bullet3/src"
-    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External"
+    INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/Vorbis"
     echo ""
+
+    # Add common engine defines
+    ENGINE_DEFINES="-DEDITOR=1 -DLUA_ENABLED=1 -DGLM_FORCE_RADIANS -DAPI_VULKAN=1"
 else
     echo "Note: POLYPHASE_PATH not set. Only addon Source/ will be included."
     echo "      Set POLYPHASE_PATH for addons that use engine headers."
     echo ""
+    ENGINE_DEFINES=""
 fi
 
 BUILD_FAILED=0
@@ -127,6 +134,7 @@ if [[ "$BUILD_CONFIG" == "Release" ]] || [[ "$BUILD_CONFIG" == "Both" ]]; then
 
     if $CXX -shared -fPIC -O2 -std=c++17 \
         $INCLUDE_FLAGS \
+        $ENGINE_DEFINES \
         -DOCTAVE_PLUGIN_EXPORT \
         -DNDEBUG \
         -DPLATFORM_LINUX=1 \
@@ -152,6 +160,7 @@ if [[ "$BUILD_CONFIG" == "Debug" ]] || [[ "$BUILD_CONFIG" == "Both" ]]; then
 
     if $CXX -shared -fPIC -O0 -g -std=c++17 \
         $INCLUDE_FLAGS \
+        $ENGINE_DEFINES \
         -DOCTAVE_PLUGIN_EXPORT \
         -D_DEBUG \
         -DPLATFORM_LINUX=1 \

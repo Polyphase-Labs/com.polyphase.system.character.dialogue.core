@@ -4,6 +4,13 @@
 #
 # Addon name is read automatically from package.json (native.binaryName or name)
 #
+# Linux uses the polyphaselabs/polyphase-engine Docker image which has the
+# engine source, Vulkan SDK, GCC 12, and all system deps baked in. No clone.
+#
+# Windows mirrors the Polyphase engine's own release.yml — checkout, install
+# Vulkan SDK, init submodules, MSBuild — but on the addon's own repo plus a
+# shallow clone of the engine for headers.
+#
 # Usage:
 #   1. Copy this entire .dev/workflows/ folder to your addon's .github/workflows/
 #   2. Tag a release: git tag v1.0.0 && git push origin v1.0.0
@@ -24,85 +31,133 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 env:
-  # Polyphase engine repo for header access (leave as-is unless using a fork)
+  # Polyphase engine repo for header access (Windows clones this for headers)
   POLYPHASE_REPO: "Polyphase-Labs/Polyphase-Engine"
+  # Docker image with engine pre-built (used by Linux job)
+  POLYPHASE_ENGINE_IMAGE: polyphaselabs/polyphase-engine:latest
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            platform: Windows
-            arch: x64
-            extension: .dll
-            lib_prefix: ""
-          - os: ubuntu-latest
-            platform: Linux
-            arch: x64
-            extension: .so
-            lib_prefix: "lib"
+  # =========================================================================
+  #  Linux: Build inside the polyphase-engine Docker container.
+  #  Engine source is already at /polyphase/. All system deps (libxcb,
+  #  Vulkan SDK, GCC 12) are baked into the image.
+  # =========================================================================
+  build-linux:
+    runs-on: ubuntu-latest
+    container:
+      image: polyphaselabs/polyphase-engine:latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
 
-    runs-on: ${{ matrix.os }}
+      - name: Mark workspace safe for git
+        run: git config --global --add safe.directory '*'
 
+      - name: Read addon name from package.json
+        run: |
+          ADDON_NAME=$(cat package.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('native',{}).get('binaryName') or d.get('name'))")
+          echo "ADDON_NAME=$ADDON_NAME" >> $GITHUB_ENV
+          echo "Addon name: $ADDON_NAME"
+
+      - name: Build Both Configs (Linux)
+        run: |
+          chmod +x .github/workflows/build.sh
+          export POLYPHASE_PATH="/polyphase"
+          ./.github/workflows/build.sh "$ADDON_NAME" Both
+
+      - name: Upload Linux Release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ADDON_NAME }}-Linux-x64-Release
+          path: |
+            build/Linux/x64/Release/lib${{ env.ADDON_NAME }}.so
+            build/Linux/x64/Release/*.sha256
+
+      - name: Upload Linux Debug artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ADDON_NAME }}-Linux-x64-Debug
+          path: |
+            build/Linux/x64/Debug/lib${{ env.ADDON_NAME }}.so
+            build/Linux/x64/Debug/*.sha256
+
+  # =========================================================================
+  #  Windows: Mirror Polyphase engine's release.yml — Vulkan SDK + MSBuild.
+  #  Clone the engine separately so headers/libs are available for linking.
+  # =========================================================================
+  build-windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Read addon name from package.json
         id: addon-info
+        shell: bash
         run: |
           ADDON_NAME=$(cat package.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('native',{}).get('binaryName') or d.get('name'))")
           echo "ADDON_NAME=$ADDON_NAME" >> $GITHUB_ENV
           echo "Addon name: $ADDON_NAME"
-        shell: bash
 
       - name: Clone Polyphase Engine
-        run: git clone --depth 1 https://github.com/${{ env.POLYPHASE_REPO }}.git ../polyphase-engine
         shell: bash
+        run: git clone --depth 1 https://github.com/${{ env.POLYPHASE_REPO }}.git ../polyphase-engine
 
-      - name: Setup MSVC (Windows)
-        if: matrix.platform == 'Windows'
+      - name: Initialize engine submodules
+        shell: bash
+        working-directory: ../polyphase-engine
+        run: |
+          git submodule init -- External/bullet3 External/doxygen-awesome-css Engine/External/PolyVox || true
+          git submodule update --recursive || true
+
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          $VER = "1.3.275.0"
+          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/$VER/windows/VulkanSDK-$VER-Installer.exe" -OutFile "$env:TEMP\VulkanSDK.exe"
+          Start-Process -FilePath "$env:TEMP\VulkanSDK.exe" -ArgumentList "--accept-licenses --default-answer --confirm-command install" -Wait
+          echo "VULKAN_SDK=C:\VulkanSDK\$VER" >> $env:GITHUB_ENV
+
+      - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
       - name: Build Both Configs (Windows)
-        if: matrix.platform == 'Windows'
         shell: cmd
         run: |
-          if exist "..\polyphase-engine" set "POLYPHASE_PATH=..\polyphase-engine"
+          set "POLYPHASE_PATH=..\polyphase-engine"
           call .github\workflows\build.bat %ADDON_NAME% Both
 
-      - name: Build Both Configs (Linux)
-        if: matrix.platform == 'Linux'
-        run: |
-          chmod +x .github/workflows/build.sh
-          if [ -d "../polyphase-engine" ]; then
-            export POLYPHASE_PATH="../polyphase-engine"
-          fi
-          ./.github/workflows/build.sh "$ADDON_NAME" Both
-
-      - name: Upload Release artifact
+      - name: Upload Windows Release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ADDON_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}-Release
+          name: ${{ env.ADDON_NAME }}-Windows-x64-Release
           path: |
-            build/${{ matrix.platform }}/${{ matrix.arch }}/Release/${{ matrix.lib_prefix }}${{ env.ADDON_NAME }}${{ matrix.extension }}
-            build/${{ matrix.platform }}/${{ matrix.arch }}/Release/*.sha256
+            build/Windows/x64/Release/${{ env.ADDON_NAME }}.dll
+            build/Windows/x64/Release/*.sha256
 
-      - name: Upload Debug artifact
+      - name: Upload Windows Debug artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ADDON_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}-Debug
+          name: ${{ env.ADDON_NAME }}-Windows-x64-Debug
           path: |
-            build/${{ matrix.platform }}/${{ matrix.arch }}/Debug/${{ matrix.lib_prefix }}${{ env.ADDON_NAME }}${{ matrix.extension }}
-            build/${{ matrix.platform }}/${{ matrix.arch }}/Debug/*.sha256
-            build/${{ matrix.platform }}/${{ matrix.arch }}/Debug/*.pdb
+            build/Windows/x64/Debug/${{ env.ADDON_NAME }}.dll
+            build/Windows/x64/Debug/*.sha256
+            build/Windows/x64/Debug/*.pdb
 
+  # =========================================================================
+  #  Release: Update package.json with binary descriptors, publish assets.
+  # =========================================================================
   release:
-    needs: build
+    needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -114,7 +169,6 @@ jobs:
         run: |
           ADDON_NAME=$(cat package.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('native',{}).get('binaryName') or d.get('name'))")
           echo "ADDON_NAME=$ADDON_NAME" >> $GITHUB_ENV
-          echo "Addon name: $ADDON_NAME"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -123,33 +177,21 @@ jobs:
 
       - name: Update package.json with binary descriptors
         run: |
-          # Install jq for JSON manipulation
           sudo apt-get install -y jq
-
-          # Build the binaries array based on what was built
           BINARIES="[]"
 
-          # Check for Windows Release
-          if [ -f "artifacts/${{ env.ADDON_NAME }}-Windows-x64-Release/${{ env.ADDON_NAME }}.dll" ]; then
+          [ -f "artifacts/${{ env.ADDON_NAME }}-Windows-x64-Release/${{ env.ADDON_NAME }}.dll" ] && \
             BINARIES=$(echo "$BINARIES" | jq '. += [{"platform": "Windows", "arch": "x64", "config": "Release", "type": "releaseAsset", "value": "${{ env.ADDON_NAME }}-Windows-x64-Release.dll"}]')
-          fi
 
-          # Check for Windows Debug
-          if [ -f "artifacts/${{ env.ADDON_NAME }}-Windows-x64-Debug/${{ env.ADDON_NAME }}.dll" ]; then
+          [ -f "artifacts/${{ env.ADDON_NAME }}-Windows-x64-Debug/${{ env.ADDON_NAME }}.dll" ] && \
             BINARIES=$(echo "$BINARIES" | jq '. += [{"platform": "Windows", "arch": "x64", "config": "Debug", "type": "releaseAsset", "value": "${{ env.ADDON_NAME }}-Windows-x64-Debug.dll"}]')
-          fi
 
-          # Check for Linux Release
-          if [ -f "artifacts/${{ env.ADDON_NAME }}-Linux-x64-Release/lib${{ env.ADDON_NAME }}.so" ]; then
+          [ -f "artifacts/${{ env.ADDON_NAME }}-Linux-x64-Release/lib${{ env.ADDON_NAME }}.so" ] && \
             BINARIES=$(echo "$BINARIES" | jq '. += [{"platform": "Linux", "arch": "x64", "config": "Release", "type": "releaseAsset", "value": "lib${{ env.ADDON_NAME }}-Linux-x64-Release.so"}]')
-          fi
 
-          # Check for Linux Debug
-          if [ -f "artifacts/${{ env.ADDON_NAME }}-Linux-x64-Debug/lib${{ env.ADDON_NAME }}.so" ]; then
+          [ -f "artifacts/${{ env.ADDON_NAME }}-Linux-x64-Debug/lib${{ env.ADDON_NAME }}.so" ] && \
             BINARIES=$(echo "$BINARIES" | jq '. += [{"platform": "Linux", "arch": "x64", "config": "Debug", "type": "releaseAsset", "value": "lib${{ env.ADDON_NAME }}-Linux-x64-Debug.so"}]')
-          fi
 
-          # Update package.json
           jq --argjson binaries "$BINARIES" '.binaries = $binaries | .resolveMode = "binary"' package.json > package.json.updated
           mv package.json.updated package.json
 
@@ -160,13 +202,10 @@ jobs:
         run: |
           mkdir -p release
           for dir in artifacts/*/; do
-            # Extract platform-arch-config from artifact name (e.g., myaddon-Windows-x64-Release)
             artifact_name=$(basename "$dir")
-            # Parse out the config (last part after last hyphen)
             config="${artifact_name##*-}"
-            # Get the platform-arch part
             platform_arch="${artifact_name%-*}"
-            platform_arch="${platform_arch#*-}"  # Remove addon name prefix
+            platform_arch="${platform_arch#*-}"
 
             for file in "$dir"*; do
               if [ -f "$file" ]; then
@@ -181,14 +220,12 @@ jobs:
                   base="${filename%.pdb}"
                   cp "$file" "release/${base}-${platform_arch}-${config}.pdb"
                 else
-                  # Checksums and other files
                   cp "$file" "release/"
                 fi
               fi
             done
           done
 
-          # Include updated package.json in release
           cp package.json "release/package.json"
 
           echo "Release files:"

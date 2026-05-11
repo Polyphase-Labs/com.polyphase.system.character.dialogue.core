@@ -92,18 +92,28 @@ echo.
 
 REM Build include paths
 set "INCLUDE_FLAGS=/I"%ADDON_ROOT%Source""
+set "ENGINE_DEFINES="
 
 if defined POLYPHASE_PATH (
     echo Using Polyphase engine at: %POLYPHASE_PATH%
     set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\Engine\Source""
     set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\Engine\Source\Engine""
+    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\Engine\Source\Editor""
     set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\Engine\Source\Plugins""
+    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External""
+    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External\Assimp""
+    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External\Bullet""
     set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External\Lua""
     set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External\glm""
     set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External\Imgui""
     set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External\ImGuizmo""
-    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External\bullet3\src""
-    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External""
+    set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%POLYPHASE_PATH%\External\Vorbis""
+
+    REM Add VULKAN_SDK if available
+    if defined VULKAN_SDK set "INCLUDE_FLAGS=!INCLUDE_FLAGS! /I"%VULKAN_SDK%\Include""
+
+    REM Add common engine defines
+    set "ENGINE_DEFINES=/D EDITOR=1 /D LUA_ENABLED=1 /D GLM_FORCE_RADIANS /D API_VULKAN=1 /D NOMINMAX"
     echo.
 ) else (
     echo Note: POLYPHASE_PATH not set. Only addon Source\ will be included.
@@ -132,6 +142,7 @@ pushd "%BUILD_DIR%\Windows\x64\Release"
 
 cl /nologo /EHsc /O2 /MD /LD ^
     !INCLUDE_FLAGS! ^
+    !ENGINE_DEFINES! ^
     /Fe:"%ADDON_NAME%.dll" ^
     /Fo:"%ADDON_NAME%_" ^
     /D "OCTAVE_PLUGIN_EXPORT" ^
@@ -171,6 +182,7 @@ pushd "%BUILD_DIR%\Windows\x64\Debug"
 
 cl /nologo /EHsc /Od /MDd /LD /Zi ^
     !INCLUDE_FLAGS! ^
+    !ENGINE_DEFINES! ^
     /Fe:"%ADDON_NAME%.dll" ^
     /Fo:"%ADDON_NAME%_" ^
     /Fd:"%ADDON_NAME%.pdb" ^
