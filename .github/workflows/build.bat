@@ -45,11 +45,10 @@ echo.
 
 REM Determine addon root (script may be in .github/workflows/ or addon root)
 set "ADDON_ROOT=."
-if exist "..\..\Source" set "ADDON_ROOT=..\..\"
-if exist "..\..\package.json" set "ADDON_ROOT=..\..\"
+if exist "..\..\Source" if exist "..\..\package.json" set "ADDON_ROOT=..\.."
 
 REM Check for Source directory
-if not exist "%ADDON_ROOT%Source" (
+if not exist "%ADDON_ROOT%\Source" (
     echo ERROR: Source directory not found!
     echo Make sure you're running this from the addon root folder or .github\workflows\.
     exit /b 1
@@ -91,7 +90,7 @@ popd
 echo.
 
 REM Build include paths
-set "INCLUDE_FLAGS=/I"%ADDON_ROOT%Source""
+set "INCLUDE_FLAGS=/I"%ADDON_ROOT%\Source""
 set "ENGINE_DEFINES="
 
 if defined POLYPHASE_PATH (
@@ -122,7 +121,7 @@ if defined POLYPHASE_PATH (
 )
 
 REM Set build output directory relative to addon root
-set "BUILD_DIR=%ADDON_ROOT%build"
+set "BUILD_DIR=%ADDON_ROOT%\build"
 
 set "BUILD_FAILED=0"
 
@@ -218,7 +217,7 @@ if "%BUILD_FAILED%"=="1" (
     echo ========================================
 
     REM Auto-update package.json with binary descriptors
-    if exist "%ADDON_ROOT%package.json" (
+    if exist "%ADDON_ROOT%\package.json" (
         echo.
         echo Updating package.json with binary descriptors...
         pushd "%ADDON_ROOT%"

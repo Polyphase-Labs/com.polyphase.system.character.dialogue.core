@@ -34,7 +34,8 @@ echo "========================================"
 echo ""
 
 # Determine addon root (script may be in .github/workflows/ or addon root)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_SOURCE="${BASH_SOURCE:-$0}"
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 ADDON_ROOT="."
 if [ -d "$SCRIPT_DIR/../../Source" ]; then
     ADDON_ROOT="$SCRIPT_DIR/../.."
@@ -86,6 +87,14 @@ echo ""
 INCLUDE_FLAGS="-I$ADDON_ROOT/Source"
 
 if [ -n "$POLYPHASE_PATH" ]; then
+    if [ ! -d "$POLYPHASE_PATH/Engine/Source" ]; then
+        echo "ERROR: POLYPHASE_PATH does not point to a valid engine root."
+        echo "  POLYPHASE_PATH = $POLYPHASE_PATH"
+        echo "  Expected to find: $POLYPHASE_PATH/Engine/Source"
+        echo ""
+        echo "Set POLYPHASE_PATH to the directory containing Engine/ and External/."
+        exit 1
+    fi
     echo "Using Polyphase engine at: $POLYPHASE_PATH"
     INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/Engine/Source"
     INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/Engine/Source/Engine"
@@ -99,6 +108,16 @@ if [ -n "$POLYPHASE_PATH" ]; then
     INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/Imgui"
     INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/ImGuizmo"
     INCLUDE_FLAGS="$INCLUDE_FLAGS -I$POLYPHASE_PATH/External/Vorbis"
+
+    # Vulkan headers — prefer $VULKAN_SDK (LunarG SDK / Docker image), fall back
+    # to system headers (libvulkan-dev) which gcc finds on its default path.
+    if [ -n "$VULKAN_SDK" ] && [ -d "$VULKAN_SDK/include" ]; then
+        echo "Using Vulkan SDK at: $VULKAN_SDK"
+        INCLUDE_FLAGS="$INCLUDE_FLAGS -I$VULKAN_SDK/include"
+    elif [ ! -f /usr/include/vulkan/vulkan.h ]; then
+        echo "WARNING: Vulkan headers not found."
+        echo "  Set VULKAN_SDK to a LunarG SDK install, or 'sudo apt install libvulkan-dev'."
+    fi
     echo ""
 
     # Add common engine defines
@@ -124,7 +143,7 @@ generate_checksum() {
 }
 
 # Build Release if requested
-if [[ "$BUILD_CONFIG" == "Release" ]] || [[ "$BUILD_CONFIG" == "Both" ]]; then
+if [ "$BUILD_CONFIG" = "Release" ] || [ "$BUILD_CONFIG" = "Both" ]; then
     echo "----------------------------------------"
     echo "Building Release configuration..."
     echo "----------------------------------------"
@@ -150,7 +169,7 @@ if [[ "$BUILD_CONFIG" == "Release" ]] || [[ "$BUILD_CONFIG" == "Both" ]]; then
 fi
 
 # Build Debug if requested
-if [[ "$BUILD_CONFIG" == "Debug" ]] || [[ "$BUILD_CONFIG" == "Both" ]]; then
+if [ "$BUILD_CONFIG" = "Debug" ] || [ "$BUILD_CONFIG" = "Both" ]; then
     echo "----------------------------------------"
     echo "Building Debug configuration..."
     echo "----------------------------------------"
@@ -230,7 +249,7 @@ else
 fi
 echo ""
 echo "Output directory: $BUILD_DIR/Linux/x64/"
-if [[ "$BUILD_CONFIG" == "Both" ]]; then
+if [ "$BUILD_CONFIG" = "Both" ]; then
     echo "  Release/lib${ADDON_NAME}.so"
     echo "  Debug/lib${ADDON_NAME}.so"
 else
