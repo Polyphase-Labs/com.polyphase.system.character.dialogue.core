@@ -117,13 +117,16 @@ jobs:
           git submodule init -- External/bullet3 External/doxygen-awesome-css Engine/External/PolyVox || true
           git submodule update --recursive || true
 
+      # Vulkan SDK install is delegated to the engine repo's composite action
+      # so every addon stays in lockstep with whatever version the engine
+      # currently ships. When the engine bumps versions it republishes the
+      # mirrored zip on a new `vulkan-sdk-<ver>` release tag and updates the
+      # action's default — this workflow needs no edit to pick up the bump.
+      # Pin to a tag instead of @main if you want change isolation
+      # (e.g. @v6.2.0 — matches the engine release this addon was tested
+      # against).
       - name: Install Vulkan SDK
-        shell: pwsh
-        run: |
-          $VER = "1.3.275.0"
-          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/$VER/windows/VulkanSDK-$VER-Installer.exe" -OutFile "$env:TEMP\VulkanSDK.exe"
-          Start-Process -FilePath "$env:TEMP\VulkanSDK.exe" -ArgumentList "--accept-licenses --default-answer --confirm-command install" -Wait
-          echo "VULKAN_SDK=C:\VulkanSDK\$VER" >> $env:GITHUB_ENV
+        uses: Polyphase-Labs/Polyphase-Engine/.github/actions/install-vulkan-sdk@main
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
