@@ -98,6 +98,8 @@ echo.
 REM Build include paths
 set "INCLUDE_FLAGS=/I"%ADDON_ROOT%\Source""
 set "ENGINE_DEFINES="
+set "ENGINE_LIBS_RELEASE="
+set "ENGINE_LIBS_DEBUG="
 
 if defined POLYPHASE_PATH (
     echo Using Polyphase engine at: %POLYPHASE_PATH%
@@ -119,6 +121,39 @@ if defined POLYPHASE_PATH (
 
     REM Add common engine defines
     set "ENGINE_DEFINES=/D EDITOR=1 /D LUA_ENABLED=1 /D GLM_FORCE_RADIANS /D API_VULKAN=1 /D NOMINMAX"
+
+    REM Locate engine import libs. Without these the addon DLL cannot
+    REM resolve any engine __imp_* symbol (LogWarning, Stream::*, ImGui::*,
+    REM lua_*, etc.) and the linker fails with ~200+ LNK2019/LNK2001 errors.
+    REM Two layouts are supported:
+    REM   1. Polyphase SDK zip (downloaded by native-addon-release.yml from
+    REM      the engine repo's GitHub release). Libs at:
+    REM        Lib\Windows\x64\ReleaseEditor\Polyphase.lib
+    REM        Lib\Windows\x64\ReleaseEditor\Lua.lib
+    REM      Only Release-CRT libs are shipped today.
+    REM   2. Local engine source tree built via MSBuild. Libs at:
+    REM        Standalone\Build\Windows\x64\ReleaseEditor\Polyphase.lib
+    REM        External\Lua\Build\Windows\x64\ReleaseEditor\Lua.lib
+    REM      Debug variants live under DebugEditor\ when the dev has built them.
+    if exist "%POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Polyphase.lib" (
+        echo Engine import libs: SDK layout
+        set "ENGINE_LIBS_RELEASE="%POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Polyphase.lib" "%POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Lua.lib""
+        if exist "%POLYPHASE_PATH%\Lib\Windows\x64\DebugEditor\Polyphase.lib" (
+            set "ENGINE_LIBS_DEBUG="%POLYPHASE_PATH%\Lib\Windows\x64\DebugEditor\Polyphase.lib" "%POLYPHASE_PATH%\Lib\Windows\x64\DebugEditor\Lua.lib""
+        )
+    ) else if exist "%POLYPHASE_PATH%\Standalone\Build\Windows\x64\ReleaseEditor\Polyphase.lib" (
+        echo Engine import libs: local engine source-tree build
+        set "ENGINE_LIBS_RELEASE="%POLYPHASE_PATH%\Standalone\Build\Windows\x64\ReleaseEditor\Polyphase.lib" "%POLYPHASE_PATH%\External\Lua\Build\Windows\x64\ReleaseEditor\Lua.lib""
+        if exist "%POLYPHASE_PATH%\Standalone\Build\Windows\x64\DebugEditor\Polyphase.lib" (
+            set "ENGINE_LIBS_DEBUG="%POLYPHASE_PATH%\Standalone\Build\Windows\x64\DebugEditor\Polyphase.lib" "%POLYPHASE_PATH%\External\Lua\Build\Windows\x64\DebugEditor\Lua.lib""
+        )
+    ) else (
+        echo WARNING: No engine import lib found under %POLYPHASE_PATH%.
+        echo          Expected one of:
+        echo            %POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Polyphase.lib  ^(SDK layout^)
+        echo            %POLYPHASE_PATH%\Standalone\Build\Windows\x64\ReleaseEditor\Polyphase.lib  ^(local build^)
+        echo          Link will fail with unresolved engine symbols.
+    )
     echo.
 ) else (
     echo Note: POLYPHASE_PATH not set. Only addon Source\ will be included.
@@ -153,7 +188,7 @@ cl /nologo /EHsc /O2 /MD /LD ^
     /D "NDEBUG" ^
     /D "PLATFORM_WINDOWS=1" ^
     !SOURCES! ^
-    /link /DLL /MACHINE:X64
+    /link /DLL /MACHINE:X64 !ENGINE_LIBS_RELEASE!
 
 if errorlevel 1 (
     popd
@@ -171,9 +206,33 @@ echo.
 
 :CheckDebug
 REM Build Debug if requested
-if /i "%BUILD_CONFIG%"=="Debug" goto :BuildDebug
-if /i "%BUILD_CONFIG%"=="Both" goto :BuildDebug
+if /i "%BUILD_CONFIG%"=="Debug" goto :CheckDebugLibs
+if /i "%BUILD_CONFIG%"=="Both" goto :CheckDebugLibs
 goto :Summary
+
+:CheckDebugLibs
+REM Skip Debug build cleanly when Debug-CRT engine import libs aren't
+REM available. The Polyphase SDK zip only ships Release-CRT libs today,
+REM so CI without a custom Debug-engine staging step would otherwise
+REM produce hundreds of LNK2019 errors here. The editor's
+REM NativeAddonManager already falls back to source-compile for Debug
+REM addons when no Debug binary is shipped (#if defined(_DEBUG) path),
+REM so end-users with Debug editors aren't blocked by this skip.
+if defined POLYPHASE_PATH (
+    if not defined ENGINE_LIBS_DEBUG (
+        echo ----------------------------------------
+        echo Skipping Debug build: no Debug-CRT engine import libs found.
+        echo ----------------------------------------
+        echo Looked for:
+        echo   %POLYPHASE_PATH%\Lib\Windows\x64\DebugEditor\Polyphase.lib
+        echo   %POLYPHASE_PATH%\Standalone\Build\Windows\x64\DebugEditor\Polyphase.lib
+        echo The Polyphase SDK zip ships Release-CRT libs only. Debug-flavor
+        echo editors will source-compile this addon at runtime via the
+        echo NativeAddonManager Debug fallback.
+        echo.
+        goto :Summary
+    )
+)
 
 :BuildDebug
 echo ----------------------------------------
@@ -193,7 +252,7 @@ cl /nologo /EHsc /Od /MDd /LD /Zi ^
     /D "_DEBUG" ^
     /D "PLATFORM_WINDOWS=1" ^
     !SOURCES! ^
-    /link /DLL /MACHINE:X64 /DEBUG
+    /link /DLL /MACHINE:X64 /DEBUG !ENGINE_LIBS_DEBUG!
 
 if errorlevel 1 (
     popd

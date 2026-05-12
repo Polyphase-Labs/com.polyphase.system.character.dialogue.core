@@ -1,15 +1,19 @@
 # Native Addon Release Workflow
 # Triggers on tags matching v*
-# Builds Debug and Release for Windows and Linux, publishes release assets
+# Builds Release for Windows and Linux (+ Linux Debug), publishes release assets
 #
 # Addon name is read automatically from package.json (native.binaryName or name)
 #
 # Linux uses the polyphaselabs/polyphase-engine Docker image which has the
-# engine source, Vulkan SDK, GCC 12, and all system deps baked in. No clone.
+# engine source + prebuilt static libs + Vulkan SDK + GCC 12 + all system deps
+# baked in. No clone needed.
 #
-# Windows mirrors the Polyphase engine's own release.yml — checkout, install
-# Vulkan SDK, init submodules, MSBuild — but on the addon's own repo plus a
-# shallow clone of the engine for headers.
+# Windows downloads polyphase-sdk-windows-x64.zip from the engine repo's
+# latest GitHub release. The zip contains engine headers + import libs
+# (Polyphase.lib, Lua.lib) — everything the linker needs to resolve the
+# __declspec(dllimport) engine symbols an addon DLL touches. We do NOT
+# clone the engine source: without import libs the link fails with ~220
+# LNK2019/LNK2001 errors against every __imp_* engine symbol.
 #
 # Usage:
 #   1. Copy this entire .dev/workflows/ folder to your addon's .github/workflows/
@@ -17,11 +21,15 @@
 #
 # Local testing:
 #   Windows: set POLYPHASE_PATH=C:\path\to\engine && .github\workflows\build.bat
+#            (POLYPHASE_PATH may point at either an SDK extraction or a
+#            local engine source-tree build; build.bat probes both layouts.)
 #   Linux:   POLYPHASE_PATH=/path/to/engine ./.github/workflows/build.sh
 #
-# Output assets (4 binaries total):
+# Output assets (Windows ships Release only; the SDK zip bundles Release-CRT
+# engine libs only, so the Debug-CRT addon link is skipped. The editor's
+# NativeAddonManager source-compiles Debug addons at runtime when no Debug
+# binary is shipped, so Debug-flavor editors aren't blocked):
 #   - <name>-Windows-x64-Release.dll
-#   - <name>-Windows-x64-Debug.dll
 #   - lib<name>-Linux-x64-Release.so
 #   - lib<name>-Linux-x64-Debug.so
 
@@ -37,7 +45,9 @@ permissions:
   contents: write
 
 env:
-  # Polyphase engine repo for header access (Windows clones this for headers)
+  # Polyphase engine repo. Windows downloads polyphase-sdk-windows-x64.zip
+  # from this repo's GitHub Releases for headers + import libs. Override
+  # per fork that publishes the SDK under a different namespace.
   POLYPHASE_REPO: "Polyphase-Labs/Polyphase-Engine"
   # Docker image with engine pre-built (used by Linux job)
   POLYPHASE_ENGINE_IMAGE: polyphaselabs/polyphase-engine:latest
@@ -90,8 +100,9 @@ jobs:
             build/Linux/x64/Debug/*.sha256
 
   # =========================================================================
-  #  Windows: Mirror Polyphase engine's release.yml — Vulkan SDK + MSBuild.
-  #  Clone the engine separately so headers/libs are available for linking.
+  #  Windows: Download the Polyphase SDK zip (headers + Polyphase.lib +
+  #  Lua.lib), install Vulkan SDK, run build.bat. The SDK zip is published
+  #  by the engine's release.yml via Installers/package_windows_sdk.py.
   # =========================================================================
   build-windows:
     runs-on: windows-latest
@@ -106,16 +117,29 @@ jobs:
           echo "ADDON_NAME=$ADDON_NAME" >> $GITHUB_ENV
           echo "Addon name: $ADDON_NAME"
 
-      - name: Clone Polyphase Engine
-        shell: bash
-        run: git clone --depth 1 https://github.com/${{ env.POLYPHASE_REPO }}.git ../polyphase-engine
-
-      - name: Initialize engine submodules
-        shell: bash
-        working-directory: ../polyphase-engine
+      # Download the prebuilt Polyphase SDK zip from the latest engine
+      # release. Contains engine headers + import libs (Polyphase.lib,
+      # Lua.lib) — everything the linker needs. Replaces cloning the engine
+      # source and trying to link without the .lib files (which produced
+      # ~220 LNK2019 unresolved-symbol errors). See the engine's
+      # Installers/package_windows_sdk.py for the zip's layout.
+      - name: Download Polyphase SDK
+        shell: pwsh
         run: |
-          git submodule init -- External/bullet3 External/doxygen-awesome-css Engine/External/PolyVox || true
-          git submodule update --recursive || true
+          $url = "https://github.com/${{ env.POLYPHASE_REPO }}/releases/latest/download/polyphase-sdk-windows-x64.zip"
+          $zip = "$env:RUNNER_TEMP\polyphase-sdk.zip"
+          $dst = "..\polyphase-engine"
+          Write-Host "Downloading Polyphase SDK from $url"
+          Invoke-WebRequest -Uri $url -OutFile $zip -UserAgent "Mozilla/5.0"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Expand-Archive -Path $zip -DestinationPath $dst -Force
+          if (-not (Test-Path "$dst\Lib\Windows\x64\ReleaseEditor\Polyphase.lib")) {
+            throw "SDK extract failed: Polyphase.lib missing under $dst\Lib\Windows\x64\ReleaseEditor\"
+          }
+          if (-not (Test-Path "$dst\Lib\Windows\x64\ReleaseEditor\Lua.lib")) {
+            throw "SDK extract failed: Lua.lib missing under $dst\Lib\Windows\x64\ReleaseEditor\"
+          }
+          Write-Host "SDK extracted successfully."
 
       # Vulkan SDK install is delegated to the engine repo's composite action
       # so every addon stays in lockstep with whatever version the engine
@@ -147,10 +171,18 @@ jobs:
             build/Windows/x64/Release/${{ env.ADDON_NAME }}.dll
             build/Windows/x64/Release/*.sha256
 
+      # Best-effort: the Polyphase SDK zip only ships Release-CRT engine
+      # import libs, so build.bat skips the Debug addon link unless the
+      # engine fork has staged Debug libs into the SDK. When skipped, this
+      # upload finds no files and warns rather than failing the workflow.
+      # The editor's NativeAddonManager already source-compiles Debug
+      # addons when no Debug binary is shipped (#if defined(_DEBUG)
+      # fallback), so users aren't blocked.
       - name: Upload Windows Debug artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ADDON_NAME }}-Windows-x64-Debug
+          if-no-files-found: warn
           path: |
             build/Windows/x64/Debug/${{ env.ADDON_NAME }}.dll
             build/Windows/x64/Debug/*.sha256
