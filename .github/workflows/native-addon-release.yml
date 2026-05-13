@@ -78,7 +78,11 @@ jobs:
 
       - name: Read addon name from package.json
         run: |
-          ADDON_NAME=$(cat package.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('native',{}).get('binaryName') or d.get('name'))")
+          # open(..., encoding='utf-8-sig') strips a leading UTF-8 BOM if
+          # present, so package.json files saved by Windows editors as
+          # "UTF-8 with BOM" don't trip json.load with JSONDecodeError
+          # "Unexpected UTF-8 BOM" on Linux / "Expecting value" on Windows.
+          ADDON_NAME=$(python3 -c "import json; d=json.load(open('package.json', encoding='utf-8-sig')); print(d.get('native',{}).get('binaryName') or d.get('name'))")
           echo "ADDON_NAME=$ADDON_NAME" >> $GITHUB_ENV
           echo "Addon name: $ADDON_NAME"
 
@@ -118,7 +122,11 @@ jobs:
         id: addon-info
         shell: bash
         run: |
-          ADDON_NAME=$(cat package.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('native',{}).get('binaryName') or d.get('name'))")
+          # open(..., encoding='utf-8-sig') strips a leading UTF-8 BOM if
+          # present, so package.json files saved by Windows editors as
+          # "UTF-8 with BOM" don't trip json.load with JSONDecodeError
+          # "Unexpected UTF-8 BOM" on Linux / "Expecting value" on Windows.
+          ADDON_NAME=$(python3 -c "import json; d=json.load(open('package.json', encoding='utf-8-sig')); print(d.get('native',{}).get('binaryName') or d.get('name'))")
           echo "ADDON_NAME=$ADDON_NAME" >> $GITHUB_ENV
           echo "Addon name: $ADDON_NAME"
 
@@ -241,7 +249,11 @@ jobs:
 
       - name: Read addon name from package.json
         run: |
-          ADDON_NAME=$(cat package.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('native',{}).get('binaryName') or d.get('name'))")
+          # open(..., encoding='utf-8-sig') strips a leading UTF-8 BOM if
+          # present, so package.json files saved by Windows editors as
+          # "UTF-8 with BOM" don't trip json.load with JSONDecodeError
+          # "Unexpected UTF-8 BOM" on Linux / "Expecting value" on Windows.
+          ADDON_NAME=$(python3 -c "import json; d=json.load(open('package.json', encoding='utf-8-sig')); print(d.get('native',{}).get('binaryName') or d.get('name'))")
           echo "ADDON_NAME=$ADDON_NAME" >> $GITHUB_ENV
 
       - name: Download all artifacts
