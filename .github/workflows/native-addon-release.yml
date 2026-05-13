@@ -49,6 +49,11 @@ env:
   # from this repo's GitHub Releases for headers + import libs. Override
   # per fork that publishes the SDK under a different namespace.
   POLYPHASE_REPO: "Polyphase-Labs/Polyphase-Engine"
+  # Optional: pin a specific engine release tag to source the SDK zip from
+  # (e.g. "v6.2.0-beta.5"). Leave empty to auto-pick the most recent release
+  # that has the asset attached, including prereleases. Pin this when an
+  # addon needs to track a known-good engine API version.
+  POLYPHASE_SDK_TAG: ""
   # Docker image with engine pre-built (used by Linux job)
   POLYPHASE_ENGINE_IMAGE: polyphaselabs/polyphase-engine:latest
 
@@ -117,19 +122,53 @@ jobs:
           echo "ADDON_NAME=$ADDON_NAME" >> $GITHUB_ENV
           echo "Addon name: $ADDON_NAME"
 
-      # Download the prebuilt Polyphase SDK zip from the latest engine
-      # release. Contains engine headers + import libs (Polyphase.lib,
-      # Lua.lib) — everything the linker needs. Replaces cloning the engine
-      # source and trying to link without the .lib files (which produced
-      # ~220 LNK2019 unresolved-symbol errors). See the engine's
-      # Installers/package_windows_sdk.py for the zip's layout.
+      # Download the prebuilt Polyphase SDK zip from the engine repo. The
+      # zip contains engine headers + import libs (Polyphase.lib, Lua.lib)
+      # — everything the linker needs. Replaces cloning engine source and
+      # trying to link without the .lib files (which produced ~220 LNK2019
+      # unresolved-symbol errors). Layout: Installers/package_windows_sdk.py.
+      #
+      # Why we don't use /releases/latest: GitHub's `/releases/latest` endpoint
+      # silently skips releases flagged as pre-release (the engine's `v*-beta.*`
+      # tags all are), and additionally any non-`v*` tag (e.g. the engine's
+      # `vulkan-sdk-<ver>` mirror tag) can win latest depending on flags. Result:
+      # `/releases/latest/download/polyphase-sdk-windows-x64.zip` 404s on a
+      # perfectly valid release. Instead we list releases via the API, sort
+      # newest-first, and pick the first one that actually has the asset.
+      # Override with POLYPHASE_SDK_TAG to pin a specific release tag.
       - name: Download Polyphase SDK
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $url = "https://github.com/${{ env.POLYPHASE_REPO }}/releases/latest/download/polyphase-sdk-windows-x64.zip"
+          $repo  = "${{ env.POLYPHASE_REPO }}"
+          $asset = "polyphase-sdk-windows-x64.zip"
+          $pin   = "${{ env.POLYPHASE_SDK_TAG }}"
+          $headers = @{ "User-Agent" = "polyphase-addon-ci"; "Accept" = "application/vnd.github+json" }
+          if ($env:GH_TOKEN) { $headers["Authorization"] = "Bearer $env:GH_TOKEN" }
+
+          if ($pin) {
+            Write-Host "Looking up pinned release tag '$pin' on $repo"
+            $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/tags/$pin" -Headers $headers
+          } else {
+            Write-Host "Querying $repo releases for one containing '$asset'"
+            $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases?per_page=30" -Headers $headers
+            $release = $releases | Where-Object { $_.assets.name -contains $asset } | Select-Object -First 1
+            if (-not $release) {
+              throw "No release on $repo has '$asset' attached. Cut a release from a tag that contains Installers/package_windows_sdk.py, or set POLYPHASE_SDK_TAG to a specific tag that does."
+            }
+          }
+
+          $a = $release.assets | Where-Object { $_.name -eq $asset } | Select-Object -First 1
+          if (-not $a) {
+            throw "Release '$($release.tag_name)' on $repo has no asset named '$asset'."
+          }
+
+          $url = $a.browser_download_url
           $zip = "$env:RUNNER_TEMP\polyphase-sdk.zip"
           $dst = "..\polyphase-engine"
-          Write-Host "Downloading Polyphase SDK from $url"
+          Write-Host "Using release '$($release.tag_name)' (prerelease=$($release.prerelease))"
+          Write-Host "Downloading $url"
           Invoke-WebRequest -Uri $url -OutFile $zip -UserAgent "Mozilla/5.0"
           New-Item -ItemType Directory -Force -Path $dst | Out-Null
           Expand-Archive -Path $zip -DestinationPath $dst -Force

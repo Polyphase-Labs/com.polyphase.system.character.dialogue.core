@@ -125,17 +125,40 @@ if defined POLYPHASE_PATH (
     REM Locate engine import libs. Without these the addon DLL cannot
     REM resolve any engine __imp_* symbol (LogWarning, Stream::*, ImGui::*,
     REM lua_*, etc.) and the linker fails with ~200+ LNK2019/LNK2001 errors.
-    REM Two layouts are supported:
-    REM   1. Polyphase SDK zip (downloaded by native-addon-release.yml from
+    REM Three layouts are supported:
+    REM   1. Installed engine (Inno Setup output staged by
+    REM      Installers/stage_distribution.py). Libs at the install root:
+    REM        <POLYPHASE_PATH>\Polyphase.lib
+    REM        <POLYPHASE_PATH>\Lua.lib
+    REM        <POLYPHASE_PATH>\PolyphaseEditor.lib  (DLL flavor, optional)
+    REM      Default: link against Polyphase.lib (static editor flavor) —
+    REM      matches the editor exe most end-user installs run today.
+    REM      Set POLYPHASE_LINK_DLL=1 to link against PolyphaseEditor.lib
+    REM      for addons that target a DLL-flavor editor build.
+    REM   2. Polyphase SDK zip (downloaded by native-addon-release.yml from
     REM      the engine repo's GitHub release). Libs at:
     REM        Lib\Windows\x64\ReleaseEditor\Polyphase.lib
     REM        Lib\Windows\x64\ReleaseEditor\Lua.lib
     REM      Only Release-CRT libs are shipped today.
-    REM   2. Local engine source tree built via MSBuild. Libs at:
+    REM   3. Local engine source tree built via MSBuild. Libs at:
     REM        Standalone\Build\Windows\x64\ReleaseEditor\Polyphase.lib
     REM        External\Lua\Build\Windows\x64\ReleaseEditor\Lua.lib
     REM      Debug variants live under DebugEditor\ when the dev has built them.
-    if exist "%POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Polyphase.lib" (
+    if exist "%POLYPHASE_PATH%\Polyphase.lib" if exist "%POLYPHASE_PATH%\Lua.lib" (
+        set "_INSTALLED_LIB=%POLYPHASE_PATH%\Polyphase.lib"
+        if "%POLYPHASE_LINK_DLL%"=="1" (
+            if exist "%POLYPHASE_PATH%\PolyphaseEditor.lib" (
+                set "_INSTALLED_LIB=%POLYPHASE_PATH%\PolyphaseEditor.lib"
+                echo Engine import libs: installed engine ^(DLL flavor — POLYPHASE_LINK_DLL=1^)
+            ) else (
+                echo Engine import libs: installed engine ^(static flavor — PolyphaseEditor.lib not found despite POLYPHASE_LINK_DLL=1^)
+            )
+        ) else (
+            echo Engine import libs: installed engine ^(static flavor^)
+        )
+        set "ENGINE_LIBS_RELEASE="!_INSTALLED_LIB!" "%POLYPHASE_PATH%\Lua.lib""
+        REM No Debug-CRT libs ship in the installer today.
+    ) else if exist "%POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Polyphase.lib" (
         echo Engine import libs: SDK layout
         set "ENGINE_LIBS_RELEASE="%POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Polyphase.lib" "%POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Lua.lib""
         if exist "%POLYPHASE_PATH%\Lib\Windows\x64\DebugEditor\Polyphase.lib" (
@@ -150,8 +173,9 @@ if defined POLYPHASE_PATH (
     ) else (
         echo WARNING: No engine import lib found under %POLYPHASE_PATH%.
         echo          Expected one of:
-        echo            %POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Polyphase.lib  ^(SDK layout^)
-        echo            %POLYPHASE_PATH%\Standalone\Build\Windows\x64\ReleaseEditor\Polyphase.lib  ^(local build^)
+        echo            %POLYPHASE_PATH%\Polyphase.lib                                            ^(installed engine^)
+        echo            %POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Polyphase.lib              ^(SDK layout^)
+        echo            %POLYPHASE_PATH%\Standalone\Build\Windows\x64\ReleaseEditor\Polyphase.lib ^(source-tree build^)
         echo          Link will fail with unresolved engine symbols.
     )
     echo.

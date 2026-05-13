@@ -1,15 +1,26 @@
-{
-    "name": "com.polyphase.system.character.dialogue.core",
-    "displayName": "Polyphase Dialogue Core",
-    "author": "Justin Jaro",
-    "description": "Cross-platform runtime dialogue system: choices, variables, events, Lua, save/load, editor preview.",
-    "version": "0.1.0",
-    "native": {
-        "target": "engine",
-        "sourceDir": "Source",
-        "binaryName": "com.polyphase.system.character.dialogue.core",
-        "entrySymbol": "PolyphasePlugin_GetDesc",
-        "apiVersion": 3,
-        "extraDefines": ["POLYPHASE_DIALOGUE_CORE=1"]
-    }
+﻿{
+    "name":  "com.polyphase.system.character.dialogue.core",
+    "displayName":  "Polyphase Dialogue Core",
+    "author":  "Justin Jaro",
+    "description":  "Cross-platform runtime dialogue system: choices, variables, events, Lua, save/load, editor preview.",
+    "version":  "0.1.0",
+    "native":  {
+                   "target":  "engine",
+                   "sourceDir":  "Source",
+                   "binaryName":  "com.polyphase.system.character.dialogue.core",
+                   "entrySymbol":  "PolyphasePlugin_GetDesc",
+                   "apiVersion":  3,
+                   "extraDefines":  [
+                                        "POLYPHASE_DIALOGUE_CORE=1"
+                                    ]
+               },
+    "binaries":  [
+                     {
+                         "config":  "Release",
+                         "arch":  "x64",
+                         "platform":  "Windows",
+                         "value":  "com.polyphase.system.character.dialogue.core-Windows-x64-Release.dll",
+                         "type":  "releaseAsset"
+                     }
+                 ]
 }
