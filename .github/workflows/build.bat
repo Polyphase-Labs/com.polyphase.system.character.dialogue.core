@@ -144,33 +144,68 @@ if defined POLYPHASE_PATH (
     REM        Standalone\Build\Windows\x64\ReleaseEditor\Polyphase.lib
     REM        External\Lua\Build\Windows\x64\ReleaseEditor\Lua.lib
     REM      Debug variants live under DebugEditor\ when the dev has built them.
-    if exist "%POLYPHASE_PATH%\Polyphase.lib" if exist "%POLYPHASE_PATH%\Lua.lib" (
-        set "_INSTALLED_LIB=%POLYPHASE_PATH%\Polyphase.lib"
-        if "%POLYPHASE_LINK_DLL%"=="1" (
-            if exist "%POLYPHASE_PATH%\PolyphaseEditor.lib" (
-                set "_INSTALLED_LIB=%POLYPHASE_PATH%\PolyphaseEditor.lib"
-                echo Engine import libs: installed engine ^(DLL flavor — POLYPHASE_LINK_DLL=1^)
+    REM Sequential probes with an explicit flag — DO NOT use
+    REM   if exist A if exist B (...) else if exist C (...)
+    REM because cmd.exe binds the `else` to the INNER `if exist B`, so when
+    REM A doesn't exist the entire chain (including C) is silently skipped.
+    REM Symptom: CI links with no engine libs and gets ~200 LNK2019 errors
+    REM even though the SDK was extracted to %POLYPHASE_PATH%.
+    set "_LIBS_FOUND=0"
+
+    REM Each ENGINE_LIBS_* assignment below uses `set VAR=...` (no outer
+    REM quotes around VAR=value) on purpose. The values contain literal "
+    REM characters around each path, and cmd's `set "VAR=..."` form would
+    REM read from set's opening " to the first " after = — which is the
+    REM quote that opens our first path — silently producing an EMPTY
+    REM variable and treating the rest of the line as a stray command.
+    REM Symptom: probe logs "Engine import libs: SDK layout" but the link
+    REM still gets ~200 LNK2019 because ENGINE_LIBS_RELEASE expanded to "".
+
+    REM 1. Installer layout (libs at %POLYPHASE_PATH% root)
+    if exist "%POLYPHASE_PATH%\Polyphase.lib" (
+        if exist "%POLYPHASE_PATH%\Lua.lib" (
+            set "_INSTALLED_LIB=%POLYPHASE_PATH%\Polyphase.lib"
+            if "%POLYPHASE_LINK_DLL%"=="1" (
+                if exist "%POLYPHASE_PATH%\PolyphaseEditor.lib" (
+                    set "_INSTALLED_LIB=%POLYPHASE_PATH%\PolyphaseEditor.lib"
+                    echo Engine import libs: installed engine ^(DLL flavor — POLYPHASE_LINK_DLL=1^)
+                ) else (
+                    echo Engine import libs: installed engine ^(static flavor — PolyphaseEditor.lib not found despite POLYPHASE_LINK_DLL=1^)
+                )
             ) else (
-                echo Engine import libs: installed engine ^(static flavor — PolyphaseEditor.lib not found despite POLYPHASE_LINK_DLL=1^)
+                echo Engine import libs: installed engine ^(static flavor^)
             )
-        ) else (
-            echo Engine import libs: installed engine ^(static flavor^)
+            set ENGINE_LIBS_RELEASE="!_INSTALLED_LIB!" "%POLYPHASE_PATH%\Lua.lib"
+            set "_LIBS_FOUND=1"
+            REM No Debug-CRT libs ship in the installer today.
         )
-        set "ENGINE_LIBS_RELEASE="!_INSTALLED_LIB!" "%POLYPHASE_PATH%\Lua.lib""
-        REM No Debug-CRT libs ship in the installer today.
-    ) else if exist "%POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Polyphase.lib" (
-        echo Engine import libs: SDK layout
-        set "ENGINE_LIBS_RELEASE="%POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Polyphase.lib" "%POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Lua.lib""
-        if exist "%POLYPHASE_PATH%\Lib\Windows\x64\DebugEditor\Polyphase.lib" (
-            set "ENGINE_LIBS_DEBUG="%POLYPHASE_PATH%\Lib\Windows\x64\DebugEditor\Polyphase.lib" "%POLYPHASE_PATH%\Lib\Windows\x64\DebugEditor\Lua.lib""
+    )
+
+    REM 2. SDK zip layout (Lib\Windows\x64\ReleaseEditor\)
+    if "!_LIBS_FOUND!"=="0" (
+        if exist "%POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Polyphase.lib" (
+            echo Engine import libs: SDK layout
+            set ENGINE_LIBS_RELEASE="%POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Polyphase.lib" "%POLYPHASE_PATH%\Lib\Windows\x64\ReleaseEditor\Lua.lib"
+            if exist "%POLYPHASE_PATH%\Lib\Windows\x64\DebugEditor\Polyphase.lib" (
+                set ENGINE_LIBS_DEBUG="%POLYPHASE_PATH%\Lib\Windows\x64\DebugEditor\Polyphase.lib" "%POLYPHASE_PATH%\Lib\Windows\x64\DebugEditor\Lua.lib"
+            )
+            set "_LIBS_FOUND=1"
         )
-    ) else if exist "%POLYPHASE_PATH%\Standalone\Build\Windows\x64\ReleaseEditor\Polyphase.lib" (
-        echo Engine import libs: local engine source-tree build
-        set "ENGINE_LIBS_RELEASE="%POLYPHASE_PATH%\Standalone\Build\Windows\x64\ReleaseEditor\Polyphase.lib" "%POLYPHASE_PATH%\External\Lua\Build\Windows\x64\ReleaseEditor\Lua.lib""
-        if exist "%POLYPHASE_PATH%\Standalone\Build\Windows\x64\DebugEditor\Polyphase.lib" (
-            set "ENGINE_LIBS_DEBUG="%POLYPHASE_PATH%\Standalone\Build\Windows\x64\DebugEditor\Polyphase.lib" "%POLYPHASE_PATH%\External\Lua\Build\Windows\x64\DebugEditor\Lua.lib""
+    )
+
+    REM 3. Local engine source-tree build (Standalone\Build\Windows\x64\ReleaseEditor\)
+    if "!_LIBS_FOUND!"=="0" (
+        if exist "%POLYPHASE_PATH%\Standalone\Build\Windows\x64\ReleaseEditor\Polyphase.lib" (
+            echo Engine import libs: local engine source-tree build
+            set ENGINE_LIBS_RELEASE="%POLYPHASE_PATH%\Standalone\Build\Windows\x64\ReleaseEditor\Polyphase.lib" "%POLYPHASE_PATH%\External\Lua\Build\Windows\x64\ReleaseEditor\Lua.lib"
+            if exist "%POLYPHASE_PATH%\Standalone\Build\Windows\x64\DebugEditor\Polyphase.lib" (
+                set ENGINE_LIBS_DEBUG="%POLYPHASE_PATH%\Standalone\Build\Windows\x64\DebugEditor\Polyphase.lib" "%POLYPHASE_PATH%\External\Lua\Build\Windows\x64\DebugEditor\Lua.lib"
+            )
+            set "_LIBS_FOUND=1"
         )
-    ) else (
+    )
+
+    if "!_LIBS_FOUND!"=="0" (
         echo WARNING: No engine import lib found under %POLYPHASE_PATH%.
         echo          Expected one of:
         echo            %POLYPHASE_PATH%\Polyphase.lib                                            ^(installed engine^)
